@@ -5,15 +5,13 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       flutter: stable
+      vars:
+        FLUTTER_MIN_SDK_VERSION: "23"
     scripts:
       - name: Reset e Generazione Android
         script: |
           rm -rf android
           flutter create . --platforms=android
-      - name: Modifica MinSdkVersion Nativamente
-        script: |
-          cd android/app
-          sed -i.bak 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' build.gradle
       - name: Build APK Release
         script: |
           flutter build apk --release
