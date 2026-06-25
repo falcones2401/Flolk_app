@@ -6,12 +6,16 @@ workflows:
     environment:
       flutter: stable
     scripts:
-      - name: Reset e Generazione Android Nativo
+      - name: Reset e Generazione Android
         script: |
           rm -rf android
           flutter create . --platforms=android
-      - name: Build APK Release Forzando MinSdkVersion
+      - name: Modifica MinSdkVersion Nativamente
         script: |
-          flutter build apk --release --min-content-view=23 --target-platform android-arm,android-arm64
+          cd android/app
+          sed -i.bak 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/g' build.gradle
+      - name: Build APK Release
+        script: |
+          flutter build apk --release
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
