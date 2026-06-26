@@ -3,7 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'chat_screen.dart';
 import 'auth_screen.dart';
-import '../main.dart'; // Importa la chiave globale del messenger dal main.dart
+// IMPORT ASSOLUTO CORRETTO: Sostituisce l'import relativo che dava errore su Codemagic
+import 'package:flolk/main.dart'; 
 
 class FlolkBouncyButton extends StatelessWidget {
   final Widget child;
@@ -134,7 +135,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       final existing = await _firestore.collection('users').where('searchName', isEqualTo: searchName).get();
       if (existing.docs.isNotEmpty) {
-        // CORREZIONE: Utilizzo di scaffoldMessengerKey per evitare crash di contesto
         scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(content: Text('Questo username è già preso!'), backgroundColor: Colors.redAccent),
         );
@@ -156,7 +156,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       });
       _autoCreateSelfChat();
     } catch (e) {
-      // CORREZIONE: Utilizzo di scaffoldMessengerKey per evitare crash di contesto
       scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(content: Text('Errore durante il salvataggio: $e'), backgroundColor: Colors.redAccent),
       );
@@ -524,7 +523,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Opzioni'),
           ],
         ),
-      ),
+          ),
     );
   }
 
