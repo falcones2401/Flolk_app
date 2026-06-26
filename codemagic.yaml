@@ -11,7 +11,7 @@ workflows:
       - name: Reset e Generazione Android
         script: |
           rm -rf android
-          flutter create . --platforms=android
+          flutter create . --platforms=android --org com.flolk --project-name secure_chat_app
       - name: Build APK Release
         script: |
           flutter build apk --release
