@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
+// 1. IMPORTA IL FILE GENERATO DA FLUTTERFIRE CLI
+import 'firebase_options.dart'; 
 
 // CHIAVE GLOBALE: Permette di inviare SnackBar da qualsiasi punto dell'applicazione senza crash
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -16,8 +18,11 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  // 2. PASSA LE OPZIONI ALL'INIZIALIZZAZIONE DI FIREBASE
   Future<void> _initializeFirebaseAndDates() async {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     await initializeDateFormatting('it_IT', null);
   }
 
