@@ -1,32 +1,41 @@
 name: secure_chat_app
-description: "A secure chat application built with Flutter."
+description: "A secure chat application - Flolk"
 publish_to: 'none'
+
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.12.2 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  
-  # Firebase
-  firebase_core: ^3.0.0
-  firebase_auth: ^5.0.0
-  cloud_firestore: ^5.0.0
-  firebase_storage: ^5.0.0
-  
-  # Utility e Media
-  intl: ^0.19.0
+
+  # Icone iOS/Android standard
+  cupertino_icons: ^1.0.6
+
+  # Firebase Core e Storage (Risolto il problema di Null Safety)
+  firebase_core: ^2.24.0
+  firebase_storage: ^12.4.10
+  cloud_firestore: ^4.14.0
+
+  # Gestione dei File e delle Immagini nella chat
   image_picker: ^1.0.7
-  file_picker: ^8.0.0
-  flutter_app_badger: ^1.5.0
-  flutter_local_notifications: ^17.0.0
+  file_picker: ^6.1.1
+
+  # Formattazione date e utility
+  intl: ^0.18.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+
+  # Linting per la qualità del codice
+  flutter_lints: ^2.0.3
 
 flutter:
   uses-material-design: true
+
+  # Se hai asset (immagini, icone, font) decommenta e configurali qui sotto:
+  # assets:
+  #   - assets/images/
