@@ -15,9 +15,9 @@ workflows:
             cp android/app/google-services.json ./google-services.json.bak
           fi
 
-          # 2. Pulizia e rigenerazione standard (quella che faceva la build verde)
+          # 2. Rimuove e rigenera la cartella android con il nome corretto
           rm -rf android
-          flutter create . --platforms=android --org com.flolk --project-name secure_chat_app
+          flutter create . --platforms=android --org com.flolk --project-name flolk
           
           # 3. Rimettiamo il file Firebase al suo posto
           if [ -f "./google-services.json.bak" ]; then
@@ -25,7 +25,7 @@ workflows:
             mv ./google-services.json.bak android/app/google-services.json
           fi
 
-          # 4. Forzatura vecchio stile (quella che NON rompeva file_picker)
+          # 4. Forzatura delle proprietà SDK (quella che non rompe file_picker)
           echo "Forzo le proprietà di sistema..."
           mkdir -p ~/.gradle
           cat << 'EOF' > ~/.gradle/init.gradle
