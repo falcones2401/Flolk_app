@@ -354,6 +354,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       await _firestore.collection('chats').doc(chatId).update({
         'lastMessage': 'Chat svuotata',
+        'lastMessageSender': 'system',
         'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -365,6 +366,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _firestore.collection('chats').doc(chatId).set({
       'hidden_for_$_myUsername': true,
     }, SetOptions(merge: true));
+  }
+
+  // Widget helper per generare le icone di spunta corrette nell'anteprima del messaggio
+  Widget _buildStatusTicks(bool read, bool delivered) {
+    if (read) {
+      return const Icon(Icons.done_all, color: Colors.blue, size: 16);
+    } else if (delivered) {
+      return const Icon(Icons.done_all, color: Colors.grey, size: 16);
+    } else {
+      return const Icon(Icons.done, color: Colors.grey, size: 16);
+    }
   }
 
   @override
@@ -543,7 +555,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _searchResults.length,
-      itemBuilder: (context, index) {
+      buildContext: (context, index) {
         final userData = _searchResults[index].data() as Map<String, dynamic>;
         final bool isOnline = userData['isOnline'] ?? false;
 
@@ -617,6 +629,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 
             final isPinned = chat['pinned_for_$_myUsername'] ?? false;
 
+            // Dati dell'ultimo messaggio salvati nella chat
+            final String lastMessageSender = chat['lastMessageSender'] ?? '';
+            final bool lastMessageRead = chat['lastMessageRead'] ?? false;
+            final bool lastMessageDelivered = chat['lastMessageDelivered'] ?? false;
+
             return StreamBuilder<DocumentSnapshot>(
               stream: isGroup ? const Stream.empty() : _firestore.collection('users').doc(targetUid).snapshots(),
               builder: (context, userSnapshot) {
@@ -661,7 +678,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           const Icon(Icons.push_pin_rounded, color: Color(0xFF6366F1), size: 16),
                       ],
                     ),
-                    subtitle: Text(chat['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                    // AGGIORNATO: Sottotitolo con spunte condizionali basate sul mittente dell'ultimo messaggio
+                    subtitle: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!isGroup && !isSelf && lastMessageSender == _myUsername) ...[
+                          _buildStatusTicks(lastMessageRead, lastMessageDelivered),
+                          const SizedBox(width: 4),
+                        ],
+                        Expanded(
+                          child: Text(
+                            chat['lastMessage'] ?? '', 
+                            maxLines: 1, 
+                            overflow: TextOverflow.ellipsis, 
+                            style: const TextStyle(color: Colors.grey, fontSize: 13)
+                          ),
+                        ),
+                      ],
+                    ),
                     trailing: PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert, color: Colors.grey),
                       color: const Color(0xFF1E293B),
