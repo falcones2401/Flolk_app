@@ -1,3 +1,15 @@
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  firebase_core: ^4.11.0
+  firebase_auth: ^6.5.4
+  cloud_firestore: ^6.6.0
+  firebase_storage: ^13.0.0      # <--- NUOVO: Per foto e video
+  image_picker: ^1.1.2           # <--- NUOVO: Per scattare foto
+  file_picker: ^8.1.3            # <--- NUOVO: Per caricare file e video
+  intl: ^0.19.0                  # <--- NUOVO: Per le date delle chat
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -5,5 +17,5 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: "launcher_icon"
-  image_path: "assets/icon/app_icon.png"
+  image_path: "assets/icon/app_icon.png" # <--- Usa la tua icona caricata
   min_sdk_android: 23
