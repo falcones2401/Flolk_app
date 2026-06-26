@@ -448,7 +448,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     subtitle: Text(chat['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.grey, fontSize: 13)),
                     trailing: PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert, color: Colors.grey),
-                      dropdownColor: const Color(0xFF1E293B),
+                      color: const Color(0xFF1E293B),
                       style: ButtonStyle(padding: MaterialStateProperty.all(EdgeInsets.zero)),
                       onSelected: (value) {
                         if (value == 'pin') _togglePinChat(chatDoc.id, isPinned);
