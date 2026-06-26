@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-import 'screens/auth_screen.dart';
+import 'package:firebase_core/firebase_core;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'screens/login_screen.dart'; // Sostituisci con i tuoi path reali
+import 'screens/home_screen.dart';  // Sostituisci con i tuoi path reali
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inizializzazione robusta che passa direttamente le opzioni generate da FlutterFire
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
+  await Firebase.initializeApp();
   runApp(const SecureChatApp());
 }
 
@@ -22,14 +18,26 @@ class SecureChatApp extends StatelessWidget {
     return MaterialApp(
       title: 'Secure Chat',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0B141A),
-        colorScheme: const ColorScheme.dark().copyWith(
-          primary: const Color(0xFF00A884),
-          secondary: const Color(0xFF00A884),
-        ),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
       ),
-      home: const AuthScreen(),
+      // Usa StreamBuilder per sentire se l'utente è già loggato sul dispositivo
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.hasData) {
+            // Se l'utente esiste, vai dritto alla Home senza mostrare il login
+            return const HomeScreen();
+          }
+          // Altrimenti, mostra la schermata di login
+          return const LoginScreen();
+        },
+      ),
     );
   }
 }
