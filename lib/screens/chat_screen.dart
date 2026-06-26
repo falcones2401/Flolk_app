@@ -93,6 +93,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       };
     }
 
+    // PASSO 1: Inseriamo di base 'delivered': false al momento dell'invio
     await _firestore.collection('chats').doc(widget.chatId).collection('messages').add({
       'text': text.isEmpty ? null : text,
       'sender': widget.myUsername,
@@ -103,6 +104,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       'deleted_for': [],
       'reactions': {}, 
       'replyTo': replyData,
+      'delivered': false,
     });
 
     String lastMsgDesc = text;
@@ -359,12 +361,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     return const BoxDecoration(color: Color(0xFF0F172A));
   }
 
+  // PASSO 3: Logica di rendering grafico delle tre tipologie di spunta
   Widget _buildStatusTicks(Map<String, dynamic> messageData, Timestamp? targetLastRead) {
     final Timestamp? msgTime = messageData['timestamp'] as Timestamp?;
+    final bool isDelivered = messageData['delivered'] ?? false;
+
     if (msgTime == null) {
       return const Icon(Icons.access_time_rounded, size: 13, color: Colors.white60);
     }
     
+    // 1. Doppia blu: Letto (L'altro utente ha aperto la chat dopo l'orario del messaggio)
     if (targetLastRead != null && targetLastRead.toDate().isAfter(msgTime.toDate())) {
       return const Row(
         mainAxisSize: MainAxisSize.min,
@@ -373,6 +379,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ],
       );
     }
+
+    // 2. Doppia grigia: Consegnato (L'altro utente ha l'app attiva in background/foreground ma non ha letto)
+    if (isDelivered) {
+      return const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.done_all_rounded, size: 14, color: Colors.white60),
+        ],
+      );
+    }
+
+    // 3. Singola grigia: Inviato con successo al server
     return const Icon(Icons.done_rounded, size: 14, color: Colors.white60);
   }
 
@@ -444,6 +462,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
                       if (docs.isNotEmpty) {
                         _updateReadStatus();
+
+                        // PASSO 2: Quando ricevi i messaggi inviati dall'altro utente e "delivered" è ancora false, 
+                        // il tuo dispositivo notifica a Firestore che il messaggio è ufficialmente arrivato (doppia spunta grigia).
+                        for (var doc in docs) {
+                          final msgData = doc.data() as Map<String, dynamic>;
+                          if (msgData['sender'] != widget.myUsername && (msgData['delivered'] == false || msgData['delivered'] == null)) {
+                            _firestore
+                                .collection('chats')
+                                .doc(widget.chatId)
+                                .collection('messages')
+                                .doc(doc.id)
+                                .update({'delivered': true});
+                          }
+                        }
                       }
 
                       return ListView.builder(
@@ -488,14 +520,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                 child: Stack(
                                   clipBehavior: Clip.none,
                                   children: [
-                                    // MODIFICA QUI: L'animazione adesso controlla se "isMe" è vero
                                     TweenAnimationBuilder<double>(
                                       key: ValueKey('anim_$docId'),
                                       tween: Tween<double>(
-                                        begin: isMe ? 0.85 : 1.0, // Parte da 0.85 solo se l'ho inviato io
+                                        begin: isMe ? 0.85 : 1.0,
                                         end: 1.0,
                                       ),
-                                      duration: Duration(milliseconds: isMe ? 200 : 0), // Zero millisecondi se ricevuto
+                                      duration: Duration(milliseconds: isMe ? 200 : 0),
                                       curve: Curves.easeOutCubic,
                                       builder: (context, value, child) {
                                         return Transform.scale(scale: value, child: child);
