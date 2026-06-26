@@ -585,10 +585,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        // RENDER GRAFICO DEL MESSAGGIO A CUI HAI RISPOSTO (SE ESISTE)
+                                        // RENDER GRAFICO DEL MESSAGGIO A CUI HAI RISPOSTO (CORRETTO)
                                         if (data['replyTo'] != null)
                                           Container(
-                                            margin: const EdgeInsets.bottom(8),
+                                            margin: const EdgeInsets.only(bottom: 8),
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
                                               color: Colors.black.withOpacity(0.15),
