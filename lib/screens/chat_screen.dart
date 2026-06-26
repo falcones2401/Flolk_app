@@ -1,6 +1,10 @@
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -26,11 +30,13 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final _firestore = FirebaseFirestore.instance;
+  final _storage = FirebaseStorage.instance;
   final _messageController = TextEditingController();
   final _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
 
   late AnimationController _typingController;
+  bool _isUploading = false;
 
   @override
   void initState() {
@@ -59,7 +65,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _sendMessage({String? mediaType, String? mediaUrl}) async {
+  void _sendMessage({String? mediaType, String? mediaUrl, String? fileName}) async {
     final text = _messageController.text.trim();
     if (text.isEmpty && mediaType == null) return;
 
@@ -74,10 +80,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       'timestamp': now,
       'mediaType': mediaType,
       'mediaUrl': mediaUrl,
+      'fileName': fileName,
+      'deleted_for': [], // Lista per tracciare chi cancella il messaggio "per sé"
     });
 
+    String lastMsgDesc = text;
+    if (mediaType == 'image') lastMsgDesc = '📷 Foto';
+    if (mediaType == 'video') lastMsgDesc = '🎥 Video';
+    if (mediaType == 'file') lastMsgDesc = '📁 Documento: ${fileName ?? 'File'}';
+
     await _firestore.collection('chats').doc(widget.chatId).update({
-      'lastMessage': mediaType != null ? '📷 [Contenuto Multimediale]' : text,
+      'lastMessage': lastMsgDesc,
       'timestamp': now,
       'typing_${widget.myUsername}': false,
     });
@@ -95,7 +108,28 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  void _simulateMediaUpload() {
+  // --- CARICAMENTO REALE DEI FILE MULTIMEDIALI ---
+  Future<void> _uploadAndSendMedia(String filePath, String type, String name) async {
+    setState(() => _isUploading = true);
+    try {
+      String ext = filePath.split('.').last;
+      String storagePath = 'chats/${widget.chatId}/${DateTime.now().millisecondsSinceEpoch}.$ext';
+      
+      UploadTask uploadTask = _storage.ref().child(storagePath).putFile(File(filePath));
+      TaskSnapshot snapshot = await uploadTask;
+      String downloadUrl = await snapshot.ref.getDownloadURL();
+
+      _sendMessage(mediaType: type, mediaUrl: downloadUrl, fileName: name);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Errore durante l\'invio del file: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      setState(() => _isUploading = false);
+    }
+  }
+
+  void _openMediaMenu() {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1E293B),
@@ -107,18 +141,34 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               FlolkBouncyButton(
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  _sendMessage(mediaType: 'image', mediaUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe');
+                  final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+                  if (picked != null) {
+                    _uploadAndSendMedia(picked.path, 'image', picked.name);
+                  }
                 },
                 child: _buildMediaOption(Icons.image_rounded, 'Foto', Colors.purple),
               ),
               FlolkBouncyButton(
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  _sendMessage(mediaType: 'video', mediaUrl: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4');
+                  final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
+                  if (picked != null) {
+                    _uploadAndSendMedia(picked.path, 'video', picked.name);
+                  }
                 },
                 child: _buildMediaOption(Icons.videocam_rounded, 'Video', Colors.pink),
+              ),
+              FlolkBouncyButton(
+                onTap: () async {
+                  Navigator.pop(context);
+                  final result = await FilePicker.platform.pickFiles(type: FileType.any);
+                  if (result != null && result.files.single.path != null) {
+                    _uploadAndSendMedia(result.files.single.path!, 'file', result.files.single.name);
+                  }
+                },
+                child: _buildMediaOption(Icons.insert_drive_file_rounded, 'Documento', Colors.blue),
               ),
             ],
           ),
@@ -135,6 +185,83 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         const SizedBox(height: 8),
         Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
       ],
+    );
+  }
+
+  // --- POPUP INFO UTENTE IN ALTO ---
+  void _showTargetProfileInfo() async {
+    final userDoc = await _firestore.collection('users').doc(widget.targetUid).get();
+    if (!userDoc.exists || !mounted) return;
+    
+    final userData = userDoc.data() as Map<String, dynamic>;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Info Contatto', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircleAvatar(radius: 40, backgroundColor: Color(0xFF0F172A), child: Icon(Icons.person, size: 50, color: Colors.white)),
+            const SizedBox(height: 16),
+            Text('@${userData['username']}', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(userData['email'] ?? 'Nessuna email', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircleAvatar(radius: 5, backgroundColor: (userData['isOnline'] ?? false) ? const Color(0xFF10B981) : Colors.grey),
+                const SizedBox(width: 8),
+                Text((userData['isOnline'] ?? false) ? 'Online ora' : 'Disconnesso', style: const TextStyle(color: Colors.white70)),
+              ],
+            )
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Chiudi', style: TextStyle(color: Color(0xFF6366F1))))
+        ],
+      ),
+    );
+  }
+
+  // --- MENU CANCELLAZIONE MESSAGGI (PRESSIONE PROLUNGATA) ---
+  void _showOptionsMessage(String messageId, bool isMe, List deletedFor) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+              title: const Text('Elimina per me', style: TextStyle(color: Colors.white)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                List updatedDeleted = List.from(deletedFor);
+                if (!updatedDeleted.contains(widget.myUsername)) {
+                  updatedDeleted.add(widget.myUsername);
+                }
+                await _firestore.collection('chats').doc(widget.chatId).collection('messages').doc(messageId).update({
+                  'deleted_for': updatedDeleted,
+                });
+              },
+            ),
+            if (isMe)
+              ListTile(
+                leading: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+                title: const Text('Elimina per tutti', style: TextStyle(color: Colors.redAccent)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _firestore.collection('chats').doc(widget.chatId).collection('messages').doc(messageId).delete();
+                },
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -185,31 +312,36 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     const CircleAvatar(backgroundColor: Color(0xFF0F172A), child: Icon(Icons.person, color: Colors.white)),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: StreamBuilder<DocumentSnapshot>(
-                        stream: _firestore.collection('users').doc(widget.targetUid).snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData || !snapshot.data!.exists) return Text(widget.targetUsername, style: const TextStyle(color: Colors.white));
-                          final data = snapshot.data!.data() as Map<String, dynamic>;
-                          final bool isOnline = data['isOnline'] ?? false;
+                      child: FlolkBouncyButton(
+                        onTap: _showTargetProfileInfo, // Cliccando sulla barra in alto apre le info contatto
+                        child: StreamBuilder<DocumentSnapshot>(
+                          stream: _firestore.collection('users').doc(widget.targetUid).snapshots(),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData || !snapshot.data!.exists) return Text(widget.targetUsername, style: const TextStyle(color: Colors.white));
+                            final data = snapshot.data!.data() as Map<String, dynamic>;
+                            final bool isOnline = data['isOnline'] ?? false;
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.targetUsername == widget.myUsername ? '${widget.targetUsername} (Tu)' : widget.targetUsername,
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                              ),
-                              Text(isOnline ? 'Online' : 'Offline', style: TextStyle(fontSize: 12, color: isOnline ? const Color(0xFF10B981) : Colors.grey)),
-                            ],
-                          );
-                        },
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  widget.targetUsername == widget.myUsername ? '${widget.targetUsername} (Tu)' : widget.targetUsername,
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                Text(isOnline ? 'Online' : 'Offline', style: TextStyle(fontSize: 12, color: isOnline ? const Color(0xFF10B981) : Colors.grey)),
+                              ],
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+            if (_isUploading)
+              const LinearProgressIndicator(backgroundColor: Color(0xFF1E293B), color: Color(0xFF6366F1)),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: _firestore
@@ -220,7 +352,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)));
-                  final docs = snapshot.data!.docs;
+                  
+                  // Filtriamo via i messaggi cancellati localmente dall'utente corrente
+                  final docs = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final List deletedFor = data['deleted_for'] ?? [];
+                    return !deletedFor.contains(widget.myUsername);
+                  }).toList();
 
                   return ListView.builder(
                     controller: _scrollController,
@@ -228,49 +366,73 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     padding: const EdgeInsets.all(20),
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
+                      final docId = docs[index].id;
                       final data = docs[index].data() as Map<String, dynamic>;
                       final bool isMe = data['sender'] == widget.myUsername;
+                      final List deletedFor = data['deleted_for'] ?? [];
 
-                      return TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 0.0, end: 1.0),
-                        duration: const Duration(milliseconds: 280),
-                        curve: Curves.linearToEaseOut,
-                        builder: (context, value, child) {
-                          return Transform.translate(
-                            offset: Offset(0, 20 * (1 - value)),
-                            child: Opacity(opacity: value, child: child),
-                          );
-                        },
-                        child: Align(
-                          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            padding: const EdgeInsets.all(12),
-                            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                            decoration: BoxDecoration(
-                              color: isMe ? const Color(0xFF6366F1) : const Color(0xFF1E293B),
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (data['mediaType'] == 'image')
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.network(data['mediaUrl'], fit: BoxFit.cover),
-                                  ),
-                                if (data['mediaType'] == 'video')
-                                  Container(
-                                    height: 150,
-                                    decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(12)),
-                                    child: const Center(child: Icon(Icons.play_circle_fill_rounded, size: 50, color: Colors.white)),
-                                  ),
-                                if (data['text'] != null)
-                                  Padding(
-                                    padding: EdgeInsets.only(top: data['mediaType'] != null ? 8.0 : 0),
-                                    child: Text(data['text'], style: const TextStyle(color: Colors.white, fontSize: 15)),
-                                  ),
-                              ],
+                      return GestureDetector(
+                        onLongPress: () => _showOptionsMessage(docId, isMe, deletedFor), // Click prolungato per eliminare
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: 0.0, end: 1.0),
+                          duration: const Duration(milliseconds: 280),
+                          curve: Curves.linearToEaseOut,
+                          builder: (context, value, child) {
+                            return Transform.translate(
+                              offset: Offset(0, 20 * (1 - value)),
+                              child: Opacity(opacity: value, child: child),
+                            );
+                          },
+                          child: Align(
+                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              padding: const EdgeInsets.all(12),
+                              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                              decoration: BoxDecoration(
+                                color: isMe ? const Color(0xFF6366F1) : const Color(0xFF1E293B),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (data['mediaType'] == 'image')
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.network(data['mediaUrl'], fit: BoxFit.cover),
+                                    ),
+                                  if (data['mediaType'] == 'video')
+                                    Container(
+                                      height: 150,
+                                      decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(12)),
+                                      child: const Center(child: Icon(Icons.play_circle_fill_rounded, size: 50, color: Colors.white)),
+                                    ),
+                                  if (data['mediaType'] == 'file')
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10)),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.insert_drive_file_rounded, color: Colors.white70),
+                                          const SizedBox(width: 8),
+                                          Flexible(
+                                            child: Text(
+                                              data['fileName'] ?? 'Documento',
+                                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  if (data['text'] != null)
+                                    Padding(
+                                      padding: EdgeInsets.only(top: data['mediaType'] != null ? 8.0 : 0),
+                                      child: Text(data['text'], style: const TextStyle(color: Colors.white, fontSize: 15)),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -332,7 +494,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 child: Row(
                   children: [
                     FlolkBouncyButton(
-                      onTap: _simulateMediaUpload,
+                      onTap: _openMediaMenu, // Menu modificato con le funzioni reali
                       child: const Padding(
                         padding: EdgeInsets.all(8.0),
                         child: Icon(Icons.add_rounded, color: Color(0xFF6366F1), size: 26),
