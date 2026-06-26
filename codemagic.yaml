@@ -25,6 +25,15 @@ workflows:
             mv ./google-services.json.bak android/app/google-services.json
           fi
 
+          # === FIX CRASH FIREBASE: Iniettiamo le configurazioni Gradle native ===
+          echo "Configuro Gradle per Firebase..."
+          
+          # Modifica android/build.gradle (Project level) per aggiungere il classpath di Google Services
+          sed -i '' 's|dependencies {|dependencies {\n        classpath '"'"'com.google.gms:google-services:4.4.1'"'"'|g' android/build.gradle
+
+          # Modifica android/app/build.gradle (App level) per applicare il plugin in fondo al file
+          echo "\napply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+
           # 4. Forzatura delle proprietà SDK (quella che non rompe file_picker)
           echo "Forzo le proprietà di sistema..."
           mkdir -p ~/.gradle
