@@ -555,7 +555,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _searchResults.length,
-      buildContext: (context, index) {
+      itemBuilder: (context, index) {
         final userData = _searchResults[index].data() as Map<String, dynamic>;
         final bool isOnline = userData['isOnline'] ?? false;
 
