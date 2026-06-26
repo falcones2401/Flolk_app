@@ -3,13 +3,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
-// IMPORTANTE: Importiamo le opzioni di Firebase
-import 'services/firebase_options.dart'; 
+// CORREZIONE: Ora il percorso è corretto perché il file è direttamente dentro lib
+import 'firebase_options.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Inizializzazione corretta passando le opzioni della piattaforma
+  // Inizializzazione con le opzioni corrette
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
