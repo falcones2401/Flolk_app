@@ -84,7 +84,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       'mediaUrl': mediaUrl,
       'fileName': fileName,
       'deleted_for': [],
-      'reactions': {}, // Mappa per memorizzare username: emoji
+      'reactions': {}, 
     });
 
     String lastMsgDesc = text;
@@ -104,7 +104,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           _scrollController.animateTo(
             0.0,
             duration: const Duration(milliseconds: 400),
-            curve: Curves.elasticOut, // Animazione rimbalzo ancora più marcata
+            curve: Curves.easeOutBack,
           );
         }
       });
@@ -131,13 +131,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // --- REAZIONI CON EMOJI A SCOMPARSA FLUIDA ---
   void _toggleReaction(String messageId, Map currentReactions, String emoji) async {
     Map updatedReactions = Map.from(currentReactions);
     if (updatedReactions[widget.myUsername] == emoji) {
-      updatedReactions.remove(widget.myUsername); // Rimuove se cliccata di nuovo
+      updatedReactions.remove(widget.myUsername);
     } else {
-      updatedReactions[widget.myUsername] = emoji; // Aggiunge o aggiorna
+      updatedReactions[widget.myUsername] = emoji;
     }
 
     await _firestore
@@ -148,7 +147,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         .update({'reactions': updatedReactions});
   }
 
-  // --- INTERFACCIA POPUP REAZIONI + OPZIONI TRE PALLINI ---
   void _showMessageActions(String messageId, Map data, bool isMe, List deletedFor) {
     final List<String> emojis = ['👍', '❤️', '😂', '😮', '😥', '🙏'];
     final Map reactions = data['reactions'] ?? {};
@@ -164,7 +162,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Riga delle Emoji Animate
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
@@ -189,7 +186,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ),
               ),
               const Divider(color: Colors.white10, height: 20),
-              // Copia Testo (Se presente)
               if (textContent != null)
                 ListTile(
                   leading: const Icon(Icons.copy_rounded, color: Colors.white70),
@@ -202,7 +198,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     );
                   },
                 ),
-              // Info Dettagliate Messaggio
               ListTile(
                 leading: const Icon(Icons.info_outline_rounded, color: Colors.white70),
                 title: const Text('Dettagli messaggio', style: TextStyle(color: Colors.white)),
@@ -211,7 +206,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   _showIdDetails(data);
                 },
               ),
-              // Elimina Locale
               ListTile(
                 leading: const Icon(Icons.delete_outline_rounded, color: Colors.white),
                 title: const Text('Elimina per me', style: TextStyle(color: Colors.white)),
@@ -220,7 +214,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   _confirmDeleteDialog(messageId, false, deletedFor);
                 },
               ),
-              // Elimina Globale
               if (isMe)
                 ListTile(
                   leading: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
@@ -237,7 +230,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  // --- POPUP DI CONFERMA ELIMINAZIONE RICHIESTO ---
   void _confirmDeleteDialog(String messageId, bool deleteForEveryone, List deletedFor) {
     showDialog(
       context: context,
@@ -288,7 +280,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  // --- FINESTRA DETTAGLI MESSAGGIO ---
   void _showIdDetails(Map data) {
     final Timestamp? timestamp = data['timestamp'] as Timestamp?;
     final String timeStr = timestamp != null 
@@ -526,13 +517,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           child: Stack(
-                            clipBehavior: ClipNone,
+                            clipBehavior: Clip.none,
                             children: [
-                              // Gestione Animata Avanzata d'Ingresso del Messaggio
                               TweenAnimationBuilder<double>(
                                 tween: Tween<double>(begin: 0.0, end: 1.0),
                                 duration: const Duration(milliseconds: 350),
-                                curve: Curves.backOut, // Effetto pop morbido in entrata
+                                curve: Curves.easeOutBack, 
                                 builder: (context, value, child) {
                                   return Transform.scale(
                                     scale: value,
@@ -605,7 +595,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                   ),
                                 ),
                               ),
-                              // Visualizzazione Badge delle Emoji di Reazione
                               if (reactions.isNotEmpty)
                                 Positioned(
                                   bottom: -8,
