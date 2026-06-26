@@ -3,8 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'chat_screen.dart';
 import 'auth_screen.dart';
-// IMPORT ASSOLUTO CORRETTO: Sostituisce l'import relativo che dava errore su Codemagic
-import 'package:flolk/main.dart'; 
+// IMPORT CORRETTO: Utilizza il percorso relativo per evitare conflitti di package su Codemagic
+import '../main.dart'; 
 
 class FlolkBouncyButton extends StatelessWidget {
   final Widget child;
@@ -31,6 +31,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
   
+  // Chiave globale per gestire i messaggi SnackBar all'interno di questo specifico State
+  final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
   String? _myUsername;
   String? _myUid;
   bool _isCheckingProfile = true;
@@ -377,40 +380,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return Scaffold(
         backgroundColor: const Color(0xFF0F172A),
         body: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 400),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(24)),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.blur_on_rounded, size: 70, color: Color(0xFF6366F1)),
-                const SizedBox(height: 16),
-                const Text('Crea Profilo Flolk', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: _usernameController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Username',
-                    labelStyle: const TextStyle(color: Colors.grey),
-                    filled: true,
-                    fillColor: const Color(0xFF0F172A),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+          child: ScaffoldMessenger(
+            key: scaffoldMessengerKey,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 400),
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(24)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.blur_on_rounded, size: 70, color: Color(0xFF6366F1)),
+                  const SizedBox(height: 16),
+                  const Text('Crea Profilo Flolk', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: _usernameController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Username',
+                      labelStyle: const TextStyle(color: Colors.grey),
+                      filled: true,
+                      fillColor: const Color(0xFF0F172A),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _saveProfile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: _saveProfile,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6366F1),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: const Text('ATTIVA PROFILO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
-                  child: const Text('ATTIVA PROFILO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -506,9 +512,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
       ),
 
-      body: _isSearching 
-          ? _buildSearchResults() 
-          : (_currentTab == 0 ? _buildChatListSection() : _buildSettingsSection()),
+      body: ScaffoldMessenger(
+        key: scaffoldMessengerKey,
+        child: _isSearching 
+            ? _buildSearchResults() 
+            : (_currentTab == 0 ? _buildChatListSection() : _buildSettingsSection()),
+      ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(borderRadius: BorderRadius.vertical(top: Radius.circular(24)), color: Color(0xFF1E293B)),
         child: BottomNavigationBar(
@@ -523,7 +532,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Opzioni'),
           ],
         ),
-          ),
+      ),
     );
   }
 
