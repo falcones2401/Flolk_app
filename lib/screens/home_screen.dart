@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import 'chat_screen.dart';
 import 'auth_screen.dart';
 
-// Componente BouncyButton personalizzato se non definito altrove
 class FlolkBouncyButton extends StatelessWidget {
   final Widget child;
   final VoidCallback onTap;
@@ -41,8 +41,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   final _usernameController = TextEditingController();
   final _searchController = TextEditingController();
+  final _groupNameController = TextEditingController(); // Controller per il nome del gruppo
   List<DocumentSnapshot> _searchResults = [];
   bool _isSearching = false;
+
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); // Chiave per controllare l'hamburger menu
 
   @override
   void initState() {
@@ -66,6 +69,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _checkAndSetStatus(false);
     _usernameController.dispose();
     _searchController.dispose();
+    _groupNameController.dispose();
     super.dispose();
   }
 
@@ -155,10 +159,106 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
   }
 
+  // NUOVA FUNZIONE: Crea Gruppo con allineamento messaggi di sistema interni
+  void _createNewGroup() async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Crea Nuovo Gruppo", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: _groupNameController,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: "Nome del gruppo...",
+            hintStyle: TextStyle(color: Colors.grey),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF6366F1))),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF818CF8), width: 2)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _groupNameController.clear();
+            },
+            child: const Text("Annulla", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
+            onPressed: () async {
+              final gName = _groupNameController.text.trim();
+              if (gName.isEmpty) return;
+              
+              Navigator.pop(ctx);
+              _groupNameController.clear();
+
+              DocumentReference groupRef = await _firestore.collection('chats').add({
+                'isGroup': true,
+                'groupName': gName,
+                'createdBy': _myUsername,
+                'users': [_myUsername], 
+                'uids': [_myUid],
+                'lastMessage': null, // Viene impostato a null così la chat non si sposta in alto finché non si scrive
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+
+              // Messaggio di sistema richiesto
+              await groupRef.collection('messages').add({
+                'text': "Sei stato aggiunto a questo gruppo",
+                'sender': "system",
+                'timestamp': FieldValue.serverTimestamp(),
+                'deleted_for': [],
+                'reactions': {},
+              });
+            },
+            child: const Text("Crea", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // NUOVA FUNZIONE: Visualizzazione Bottom Sheet degli Stati
+  void _showStatuses() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Stati", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0xFF10B981), width: 2)),
+                  child: const CircleAvatar(backgroundColor: Color(0xFF0F172A), child: Icon(Icons.person, color: Colors.white)),
+                ),
+                title: const Text("Il mio Stato", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text("Aggiungi un aggiornamento", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openChat(String targetUsername, String targetUid) async {
     FocusScope.of(context).unfocus();
     String chatId;
-    if (targetUsername == _myUsername) {
+    bool isSelf = targetUsername == _myUsername;
+    
+    if (isSelf) {
       chatId = "${_myUsername!}_${_myUsername!}";
     } else {
       List<String> ids = [_myUsername!, targetUsername];
@@ -166,12 +266,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       chatId = ids.join("_");
     }
 
-    // Al momento dell'apertura ripristiniamo la visibilità per noi se era stata nascosta
+    // Nota bene: manteniamo il lastMessage esistente se presente, per evitare salti grafici all'apertura
+    final docCheck = await _firestore.collection('chats').doc(chatId).get();
+    String initialMsg = 'Inizia a chattare...';
+    if (docCheck.exists && docCheck.data()?['lastMessage'] != null) {
+      initialMsg = docCheck.data()?['lastMessage'];
+    }
+
     await _firestore.collection('chats').doc(chatId).set({
       'id': chatId,
       'users': [_myUsername, targetUsername],
       'uids': [_myUid, targetUid],
-      'lastMessage': 'Inizia a chattare...',
+      'isGroup': false,
+      'lastMessage': isSelf ? 'Spazio personale (Messaggi salvati)' : (docCheck.exists ? initialMsg : null),
       'timestamp': FieldValue.serverTimestamp(),
       'hidden_for_$_myUsername': false,
     }, SetOptions(merge: true));
@@ -197,8 +304,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
     }
   }
-
-  // --- OPERAZIONI DI OPZIONI CHAT (TRE PALLINI) ---
 
   void _togglePinChat(String chatId, bool currentPinnedStatus) async {
     await _firestore.collection('chats').doc(chatId).set({
@@ -280,11 +385,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     return Scaffold(
+      key: _scaffoldKey, // Chiave assegnata allo Scaffold per gestire il Drawer
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: const Color(0xFF1E293B),
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(bottom: Radius.circular(20))),
+        // Mostra il pulsante Hamburger (Menu) solo se non stiamo attivamente cercando nella barra
+        leading: _isSearching 
+          ? null 
+          : IconButton(
+              icon: const Icon(Icons.menu_rounded, color: Colors.white),
+              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+            ),
         title: _isSearching
           ? TextField(
               controller: _searchController,
@@ -311,6 +424,57 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
         ],
       ),
+
+      // NUOVO DRAWER: Menu ad Hamburger laterale perfettamente integrato
+      drawer: Drawer(
+        backgroundColor: const Color(0xFF1E293B),
+        child: Column(
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(color: Color(0xFF0F172A)),
+              child: Row(
+                children: [
+                  const CircleAvatar(
+                    radius: 26,
+                    backgroundColor: Color(0xFF1E293B),
+                    child: Icon(Icons.account_circle, size: 36, color: Colors.white),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("@$_myUsername", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 4),
+                        const Text("Online", style: TextStyle(color: Color(0xFF10B981), fontSize: 12)),
+                      ],
+                    ),
+                  )
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.amp_stories_rounded, color: Color(0xFF6366F1)),
+              title: const Text("Stati", style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                _showStatuses();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.group_add_rounded, color: Color(0xFF6366F1)),
+              title: const Text("Crea Gruppo", style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                _createNewGroup();
+              },
+            ),
+            const Divider(color: Colors.white10),
+          ],
+        ),
+      ),
+
       body: _isSearching 
           ? _buildSearchResults() 
           : (_currentTab == 0 ? _buildChatListSection() : _buildSettingsSection()),
@@ -364,11 +528,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         
-        // Filtriamo le chat nascondendo quelle impostate come "hidden" per l'utente attuale
+        // FILTRO EVITAMENTO BUG SPOSTAMENTO: Escludiamo le chat vuote (lastMessage nullo)
         var chatDocs = snapshot.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
           final isHidden = data['hidden_for_$_myUsername'] ?? false;
-          return !isHidden;
+          final lastMsg = data['lastMessage'];
+          
+          // Se l'ultimo messaggio è nullo significa che la chat/gruppo è appena stata creata e nessuno ha scritto.
+          // Non la mostriamo in lista per evitare lo spostamento e il salto grafico improvviso.
+          return !isHidden && lastMsg != null;
         }).toList();
 
         // Ordiniamo mettendo prima le chat fissate (pinned), poi per timestamp
@@ -400,17 +568,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             final chat = chatDoc.data() as Map<String, dynamic>;
             final List users = chat['users'] ?? [];
             final List uids = chat['uids'] ?? [];
+            final bool isGroup = chat['isGroup'] ?? false;
             
-            final isSelf = users.length == 2 && users[0] == _myUsername && users[1] == _myUsername;
-            final targetUsername = isSelf ? _myUsername! : users.firstWhere((name) => name != _myUsername, orElse: () => 'Utente');
-            final targetUid = isSelf ? _myUid! : uids[users.indexOf(targetUsername)];
+            final isSelf = !isGroup && users.length == 2 && users[0] == _myUsername && users[1] == _myUsername;
+            
+            // Gestione titolo se è gruppo o chat singola
+            final targetUsername = isGroup 
+                ? (chat['groupName'] ?? 'Gruppo')
+                : (isSelf ? _myUsername! : users.firstWhere((name) => name != _myUsername, orElse: () => 'Utente'));
+                
+            final targetUid = isGroup 
+                ? 'group_chat' 
+                : (isSelf ? _myUid! : uids[users.indexOf(targetUsername)]);
+                
             final isPinned = chat['pinned_for_$_myUsername'] ?? false;
 
             return StreamBuilder<DocumentSnapshot>(
-              stream: _firestore.collection('users').doc(targetUid).snapshots(),
+              stream: isGroup ? const Stream.empty() : _firestore.collection('users').doc(targetUid).snapshots(),
               builder: (context, userSnapshot) {
                 bool isOnline = false;
-                if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                if (!isGroup && userSnapshot.hasData && userSnapshot.data!.exists) {
                   isOnline = (userSnapshot.data!.data() as Map<String, dynamic>)['isOnline'] ?? false;
                 }
 
@@ -424,9 +601,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         CircleAvatar(
                           backgroundColor: isSelf ? const Color(0xFF6366F1).withOpacity(0.2) : const Color(0xFF0F172A),
                           radius: 24,
-                          child: Icon(isSelf ? Icons.bookmark_rounded : Icons.person, color: isSelf ? const Color(0xFF6366F1) : Colors.white),
+                          child: Icon(
+                            isGroup 
+                              ? Icons.groups_rounded 
+                              : (isSelf ? Icons.bookmark_rounded : Icons.person), 
+                            color: isSelf ? const Color(0xFF6366F1) : Colors.white
+                          ),
                         ),
-                        if (!isSelf)
+                        if (!isSelf && !isGroup)
                           Positioned(
                             bottom: 2, right: 2,
                             child: CircleAvatar(radius: 6, backgroundColor: isOnline ? const Color(0xFF10B981) : Colors.grey),
@@ -449,7 +631,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     trailing: PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert, color: Colors.grey),
                       color: const Color(0xFF1E293B),
-                      style: ButtonStyle(padding: MaterialStateProperty.all(EdgeInsets.zero)),
                       onSelected: (value) {
                         if (value == 'pin') _togglePinChat(chatDoc.id, isPinned);
                         if (value == 'clear') _clearChatMessages(chatDoc.id);
@@ -488,7 +669,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                       ],
                     ),
-                    onTap: () => _openChat(targetUsername, targetUid),
+                    onTap: () {
+                      if (isGroup) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => ChatScreen(
+                              chatId: chatDoc.id,
+                              targetUsername: targetUsername,
+                              targetUid: "group_chat",
+                              myUsername: _myUsername!,
+                              currentBackground: _selectedBackground,
+                              specialSendAnimation: _specialSendAnimation,
+                            ),
+                          ),
+                        );
+                      } else {
+                        _openChat(targetUsername, targetUid);
+                      }
+                    },
                   ),
                 );
               },
