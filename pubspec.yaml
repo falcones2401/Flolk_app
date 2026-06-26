@@ -14,11 +14,11 @@ dependencies:
   # Icone iOS/Android standard
   cupertino_icons: ^1.0.6
 
-  # Firebase Core e Firestore (Senza Storage!)
+  # Firebase Core e Firestore (Senza Storage, usi Cloudinary!)
   firebase_core: ^2.24.0
   cloud_firestore: ^4.14.0
 
-  # Gestione dei File e delle Immagini nella chat (per pescare i file da mandare a Cloudinary)
+  # Gestione dei File e delle Immagini nella chat
   image_picker: ^1.0.7
   file_picker: ^6.1.1
 
@@ -32,5 +32,18 @@ dev_dependencies:
   # Linting per la qualità del codice
   flutter_lints: ^2.0.3
 
+  # Pacchetto richiesto da Codemagic per lo Step 4
+  flutter_launcher_icons: ^0.13.1
+
 flutter:
   uses-material-design: true
+
+  # Definiamo la cartella assets così Flutter sa dove andare a leggere l'icona
+  assets:
+    - assets/icon/
+
+# Configurazione specifica per la generazione dell'icona
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon.png"
