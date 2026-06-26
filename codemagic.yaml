@@ -13,20 +13,20 @@ workflows:
           rm -rf android
           flutter create . --platforms=android --org com.flolk --project-name secure_chat_app
           
-          echo "Forzo la configurazione di Android compileSdk a 36..."
-          cat << 'EOF' >> android/build.gradle.kts
-
-          rootProject.extra.set("compileSdkVersion", 36)
-
-          subprojects {
-              plugins.withId("com.android.application") {
-                  configure<com.android.build.gradle.BaseExtension> {
-                      compileSdkVersion(36)
+          echo "Forzo SDK 36 a livello globale di sistema..."
+          mkdir -p ~/.gradle
+          cat << 'EOF' > ~/.gradle/init.gradle
+          allprojects { project ->
+              def forceSdk = {
+                  if (project.extensions.findByName("android") != null) {
+                      project.android.compileSdkVersion = 36
                   }
               }
-              plugins.withId("com.android.library") {
-                  configure<com.android.build.gradle.BaseExtension> {
-                      compileSdkVersion(36)
+              if (project.state.executed) {
+                  forceSdk()
+              } else {
+                  project.afterEvaluate {
+                      forceSdk()
                   }
               }
           }
