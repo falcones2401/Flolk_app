@@ -16,9 +16,9 @@ workflows:
             cp android/app/google-services.json ./google-services.json.bak
           fi
 
-          # 2. Rimuove e rigenera la cartella android
+          # 2. Rimuove e rigenera la cartella android usando i veri dati del pacchetto
           rm -rf android
-          flutter create . --platforms=android --org com.flolk --project-name secure_chat_app
+          flutter create . --platforms=android --org com.flolk --project-name flolk
           
           # 3. Ripristina il file google-services.json nella nuova cartella
           if [ -f "./google-services.json.bak" ]; then
