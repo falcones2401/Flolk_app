@@ -8,33 +8,13 @@ workflows:
       vars:
         FLUTTER_MIN_SDK_VERSION: "23"
     scripts:
-      - name: Generazione Android con Firebase
+      - name: Generazione Android Pulita
         script: |
-          # 1. Teniamo al sicuro il google-services.json che hai caricato
-          if [ -f "android/app/google-services.json" ]; then
-            cp android/app/google-services.json ./google-services.json.bak
-          fi
-
-          # 2. Rimuove e rigenera la cartella android con il nome corretto
+          # 1. Rimuove e rigenera la cartella android con il nome corretto
           rm -rf android
           flutter create . --platforms=android --org com.flolk --project-name flolk
           
-          # 3. Rimettiamo il file Firebase al suo posto
-          if [ -f "./google-services.json.bak" ]; then
-            mkdir -p android/app
-            mv ./google-services.json.bak android/app/google-services.json
-          fi
-
-          # === FIX NUOVO GRADLE: Configurazione Firebase standard moderno ===
-          echo "Configuro il nuovo sistema di plugin Gradle per Firebase..."
-          
-          # Aggiunge il plugin di Google Services nel NUOVO file android/settings.gradle
-          sed -i '' 's|plugins {|plugins {\n    id "com.google.gms.google-services" version "4.4.1" apply false|g' android/settings.gradle
-
-          # Applica il plugin nel NUOVO file android/app/build.gradle
-          sed -i '' 's|plugins {|plugins {\n    id "com.google.gms.google-services"|g' android/app/build.gradle
-
-          # 4. Forzatura delle proprietà SDK (quella che non rompe file_picker)
+          # 2. Forzatura delle proprietà SDK per compatibilità plugin
           echo "Forzo le proprietà di sistema..."
           mkdir -p ~/.gradle
           cat << 'EOF' > ~/.gradle/init.gradle
