@@ -14,8 +14,9 @@ dependencies:
   # Icone iOS/Android standard
   cupertino_icons: ^1.0.6
 
-  # Firebase Core e Firestore (Senza Storage, usi Cloudinary!)
+  # Firebase (Inclusa l'autenticazione che mancava e Firestore)
   firebase_core: ^2.24.0
+  firebase_auth: ^4.16.0
   cloud_firestore: ^4.14.0
 
   # Gestione dei File e delle Immagini nella chat
