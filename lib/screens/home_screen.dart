@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart';
 import 'chat_screen.dart';
 import 'auth_screen.dart';
 
@@ -41,11 +40,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   final _usernameController = TextEditingController();
   final _searchController = TextEditingController();
-  final _groupNameController = TextEditingController(); // Controller per il nome del gruppo
+  final _groupNameController = TextEditingController(); 
   List<DocumentSnapshot> _searchResults = [];
   bool _isSearching = false;
 
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); // Chiave per controllare l'hamburger menu
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); 
 
   @override
   void initState() {
@@ -74,41 +73,58 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _checkAndSetStatus(bool online) async {
-    if (_myUid != null && _myUsername != null) {
-      await _firestore.collection('users').doc(_myUid).update({
-        'isOnline': online,
-        'lastSeen': FieldValue.serverTimestamp(),
-      });
+    try {
+      if (_myUid != null && _myUsername != null) {
+        await _firestore.collection('users').doc(_myUid).update({
+          'isOnline': online,
+          'lastSeen': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint("Errore aggiornamento stato online: $e");
     }
   }
 
+  // FIX SCHERMATA NERA: Gestione errori e timeout sul recupero del profilo
   void _loadMyProfile() async {
     final user = _auth.currentUser;
     if (user != null) {
       _myUid = user.uid;
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists && doc.data() != null) {
-        _myUsername = doc.get('username');
-        _checkAndSetStatus(true);
-        _autoCreateSelfChat();
+      try {
+        // Se Firestore non risponde entro 5 secondi lancia un'eccezione e sblocca l'app
+        final doc = await _firestore.collection('users').doc(user.uid).get().timeout(const Duration(seconds: 5));
+        if (doc.exists && doc.data() != null) {
+          _myUsername = doc.get('username');
+          _checkAndSetStatus(true);
+          _autoCreateSelfChat();
+        }
+      } catch (e) {
+        debugPrint("Errore o Timeout nel caricamento del profilo Firestore: $e");
+        // Non blocchiamo l'applicazione; lasciamo che vada avanti per mostrare la UI di creazione profilo o login
       }
     }
-    setState(() {
-      _isCheckingProfile = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isCheckingProfile = false;
+      });
+    }
   }
 
   void _autoCreateSelfChat() async {
     if (_myUsername == null || _myUid == null) return;
     String selfChatId = "${_myUsername!}_${_myUsername!}";
     
-    await _firestore.collection('chats').doc(selfChatId).set({
-      'id': selfChatId,
-      'users': [_myUsername, _myUsername],
-      'uids': [_myUid, _myUid],
-      'lastMessage': 'Spazio personale (Messaggi salvati)',
-      'timestamp': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    try {
+      await _firestore.collection('chats').doc(selfChatId).set({
+        'id': selfChatId,
+        'users': [_myUsername, _myUsername],
+        'uids': [_myUid, _myUid],
+        'lastMessage': 'Spazio personale (Messaggi salvati)',
+        'timestamp': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint("Errore creazione chat personale: $e");
+    }
   }
 
   void _saveProfile() async {
@@ -117,28 +133,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (username.isEmpty || user == null) return;
 
     final searchName = username.toLowerCase();
-    final existing = await _firestore.collection('users').where('searchName', isEqualTo: searchName).get();
-    if (existing.docs.isNotEmpty) {
+    try {
+      final existing = await _firestore.collection('users').where('searchName', isEqualTo: searchName).get();
+      if (existing.docs.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Questo username è già preso!'), backgroundColor: Colors.redAccent),
+        );
+        return;
+      }
+
+      await _firestore.collection('users').doc(user.uid).set({
+        'username': username,
+        'searchName': searchName,
+        'email': user.email,
+        'uid': user.uid,
+        'isOnline': true,
+        'lastSeen': FieldValue.serverTimestamp(),
+      });
+
+      setState(() {
+        _myUsername = username;
+        _myUid = user.uid;
+      });
+      _autoCreateSelfChat();
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Questo username è già preso!'), backgroundColor: Colors.redAccent),
+        SnackBar(content: Text('Errore durante il salvataggio: $e'), backgroundColor: Colors.redAccent),
       );
-      return;
     }
-
-    await _firestore.collection('users').doc(user.uid).set({
-      'username': username,
-      'searchName': searchName,
-      'email': user.email,
-      'uid': user.uid,
-      'isOnline': true,
-      'lastSeen': FieldValue.serverTimestamp(),
-    });
-
-    setState(() {
-      _myUsername = username;
-      _myUid = user.uid;
-    });
-    _autoCreateSelfChat();
   }
 
   void _searchUsers(String query) async {
@@ -148,18 +170,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     
     final lowercaseQuery = query.toLowerCase();
-    final result = await _firestore
-        .collection('users')
-        .where('searchName', isGreaterThanOrEqualTo: lowercaseQuery)
-        .where('searchName', isLessThanOrEqualTo: '$lowercaseQuery\uf8ff')
-        .get();
+    try {
+      final result = await _firestore
+          .collection('users')
+          .where('searchName', isGreaterThanOrEqualTo: lowercaseQuery)
+          .where('searchName', isLessThanOrEqualTo: '$lowercaseQuery\uf8ff')
+          .get();
 
-    setState(() {
-      _searchResults = result.docs.where((doc) => doc.get('username') != _myUsername).toList();
-    });
+      setState(() {
+        _searchResults = result.docs.where((doc) => doc.get('username') != _myUsername).toList();
+      });
+    } catch (e) {
+      debugPrint("Errore ricerca utenti: $e");
+    }
   }
 
-  // NUOVA FUNZIONE: Crea Gruppo con allineamento messaggi di sistema interni
   void _createNewGroup() async {
     showDialog(
       context: context,
@@ -194,24 +219,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               Navigator.pop(ctx);
               _groupNameController.clear();
 
-              DocumentReference groupRef = await _firestore.collection('chats').add({
-                'isGroup': true,
-                'groupName': gName,
-                'createdBy': _myUsername,
-                'users': [_myUsername], 
-                'uids': [_myUid],
-                'lastMessage': null, // Viene impostato a null così la chat non si sposta in alto finché non si scrive
-                'timestamp': FieldValue.serverTimestamp(),
-              });
+              try {
+                DocumentReference groupRef = await _firestore.collection('chats').add({
+                  'isGroup': true,
+                  'groupName': gName,
+                  'createdBy': _myUsername,
+                  'users': [_myUsername], 
+                  'uids': [_myUid],
+                  'lastMessage': null, 
+                  'timestamp': FieldValue.serverTimestamp(),
+                });
 
-              // Messaggio di sistema richiesto
-              await groupRef.collection('messages').add({
-                'text': "Sei stato aggiunto a questo gruppo",
-                'sender': "system",
-                'timestamp': FieldValue.serverTimestamp(),
-                'deleted_for': [],
-                'reactions': {},
-              });
+                await groupRef.collection('messages').add({
+                  'text': "Sei stato aggiunto a questo gruppo",
+                  'sender': "system",
+                  'timestamp': FieldValue.serverTimestamp(),
+                  'deleted_for': [],
+                  'reactions': {},
+                });
+              } catch (e) {
+                debugPrint("Errore creazione gruppo: $e");
+              }
             },
             child: const Text("Crea", style: TextStyle(color: Colors.white)),
           ),
@@ -220,7 +248,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  // NUOVA FUNZIONE: Visualizzazione Bottom Sheet degli Stati
   void _showStatuses() {
     showModalBottomSheet(
       context: context,
@@ -266,42 +293,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       chatId = ids.join("_");
     }
 
-    // Nota bene: manteniamo il lastMessage esistente se presente, per evitare salti grafici all'apertura
-    final docCheck = await _firestore.collection('chats').doc(chatId).get();
-    String initialMsg = 'Inizia a chattare...';
-    if (docCheck.exists && docCheck.data()?['lastMessage'] != null) {
-      initialMsg = docCheck.data()?['lastMessage'];
-    }
+    try {
+      final docCheck = await _firestore.collection('chats').doc(chatId).get();
+      String? initialMsg = 'Inizia a chattare...';
+      if (docCheck.exists && docCheck.data()?['lastMessage'] != null) {
+        initialMsg = docCheck.data()?['lastMessage'];
+      }
 
-    await _firestore.collection('chats').doc(chatId).set({
-      'id': chatId,
-      'users': [_myUsername, targetUsername],
-      'uids': [_myUid, targetUid],
-      'isGroup': false,
-      'lastMessage': isSelf ? 'Spazio personale (Messaggi salvati)' : (docCheck.exists ? initialMsg : null),
-      'timestamp': FieldValue.serverTimestamp(),
-      'hidden_for_$_myUsername': false,
-    }, SetOptions(merge: true));
+      await _firestore.collection('chats').doc(chatId).set({
+        'id': chatId,
+        'users': [_myUsername, targetUsername],
+        'uids': [_myUid, targetUid],
+        'isGroup': false,
+        'lastMessage': isSelf ? 'Spazio personale (Messaggi salvati)' : (docCheck.exists ? initialMsg : null),
+        'timestamp': FieldValue.serverTimestamp(),
+        'hidden_for_$_myUsername': false,
+      }, SetOptions(merge: true));
 
-    if (mounted) {
-      setState(() {
-        _isSearching = false;
-        _searchController.clear();
-        _searchResults = [];
-      });
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+          _searchController.clear();
+          _searchResults = [];
+        });
 
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ChatScreen(
-            chatId: chatId,
-            targetUsername: targetUsername,
-            targetUid: targetUid,
-            myUsername: _myUsername!,
-            currentBackground: _selectedBackground,
-            specialSendAnimation: _specialSendAnimation,
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ChatScreen(
+              chatId: chatId,
+              targetUsername: targetUsername,
+              targetUid: targetUid,
+              myUsername: _myUsername!,
+              currentBackground: _selectedBackground,
+              specialSendAnimation: _specialSendAnimation,
+            ),
           ),
-        ),
-      );
+        );
+      }
+    } catch (e) {
+      debugPrint("Errore apertura chat: $e");
     }
   }
 
@@ -312,17 +342,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _clearChatMessages(String chatId) async {
-    final messages = await _firestore.collection('chats').doc(chatId).collection('messages').get();
-    final batch = _firestore.batch();
-    for (var doc in messages.docs) {
-      batch.delete(doc.reference);
-    }
-    await batch.commit();
+    try {
+      final messages = await _firestore.collection('chats').doc(chatId).collection('messages').get();
+      final batch = _firestore.batch();
+      for (var doc in messages.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
 
-    await _firestore.collection('chats').doc(chatId).update({
-      'lastMessage': 'Chat svuotata',
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+      await _firestore.collection('chats').doc(chatId).update({
+        'lastMessage': 'Chat svuotata',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint("Errore svuotamento chat: $e");
+    }
   }
 
   void _hideChat(String chatId) async {
@@ -385,13 +419,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     return Scaffold(
-      key: _scaffoldKey, // Chiave assegnata allo Scaffold per gestire il Drawer
+      key: _scaffoldKey, 
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: const Color(0xFF1E293B),
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(bottom: Radius.circular(20))),
-        // Mostra il pulsante Hamburger (Menu) solo se non stiamo attivamente cercando nella barra
         leading: _isSearching 
           ? null 
           : IconButton(
@@ -425,7 +458,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
       ),
 
-      // NUOVO DRAWER: Menu ad Hamburger laterale perfettamente integrato
       drawer: Drawer(
         backgroundColor: const Color(0xFF1E293B),
         child: Column(
@@ -528,18 +560,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         
-        // FILTRO EVITAMENTO BUG SPOSTAMENTO: Escludiamo le chat vuote (lastMessage nullo)
         var chatDocs = snapshot.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
           final isHidden = data['hidden_for_$_myUsername'] ?? false;
           final lastMsg = data['lastMessage'];
-          
-          // Se l'ultimo messaggio è nullo significa che la chat/gruppo è appena stata creata e nessuno ha scritto.
-          // Non la mostriamo in lista per evitare lo spostamento e il salto grafico improvviso.
           return !isHidden && lastMsg != null;
         }).toList();
 
-        // Ordiniamo mettendo prima le chat fissate (pinned), poi per timestamp
         chatDocs.sort((a, b) {
           final dataA = a.data() as Map<String, dynamic>;
           final dataB = b.data() as Map<String, dynamic>;
@@ -572,7 +599,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             
             final isSelf = !isGroup && users.length == 2 && users[0] == _myUsername && users[1] == _myUsername;
             
-            // Gestione titolo se è gruppo o chat singola
             final targetUsername = isGroup 
                 ? (chat['groupName'] ?? 'Gruppo')
                 : (isSelf ? _myUsername! : users.firstWhere((name) => name != _myUsername, orElse: () => 'Utente'));
