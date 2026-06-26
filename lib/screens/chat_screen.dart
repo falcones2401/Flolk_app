@@ -61,7 +61,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // Aggiorna il timestamp di lettura per questo utente nella chat
   void _updateReadStatus() {
     _firestore.collection('chats').doc(widget.chatId).update({
       'last_read_${widget.myUsername}': FieldValue.serverTimestamp(),
@@ -360,7 +359,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     return const BoxDecoration(color: Color(0xFF0F172A));
   }
 
-  // Widget per renderizzare le spunte di lettura dinamiche
   Widget _buildStatusTicks(Map<String, dynamic> messageData, Timestamp? targetLastRead) {
     final Timestamp? msgTime = messageData['timestamp'] as Timestamp?;
     if (msgTime == null) {
@@ -436,7 +434,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   child: StreamBuilder<QuerySnapshot>(
                     stream: _firestore.collection('chats').doc(widget.chatId).collection('messages').orderBy('timestamp', descending: true).snapshots(),
                     builder: (context, snapshot) {
-                      // Fix slittamento: usiamo un box vuoto finché i dati non ci sono per preservare il layout
                       if (!snapshot.hasData) return const SizedBox.shrink();
                       
                       final docs = snapshot.data!.docs.where((doc) {
@@ -445,7 +442,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         return !deletedFor.contains(widget.myUsername);
                       }).toList();
 
-                      // Segnala la lettura dei nuovi messaggi arrivati in tempo reale
                       if (docs.isNotEmpty) {
                         _updateReadStatus();
                       }
@@ -463,7 +459,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                           final List deletedFor = data['deleted_for'] ?? [];
                           final Map reactions = data['reactions'] ?? {};
 
-                          // SWIPE TO REPLY IMPLEMENTATO CON DISMISSIBLE
                           return Dismissible(
                             key: ValueKey('dismiss_$docId'),
                             direction: DismissDirection.startToEnd,
@@ -477,7 +472,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                 };
                               });
                               _focusNode.requestFocus();
-                              return false; // Non rimuove fisicamente l'elemento dalla lista
+                              return false;
                             },
                             background: Align(
                               alignment: Alignment.centerLeft,
@@ -493,11 +488,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                 child: Stack(
                                   clipBehavior: Clip.none,
                                   children: [
-                                    // FIX ANIMAZIONE CON VALUEKEY SPECIFICA
+                                    // MODIFICA QUI: L'animazione adesso controlla se "isMe" è vero
                                     TweenAnimationBuilder<double>(
                                       key: ValueKey('anim_$docId'),
-                                      tween: Tween<double>(begin: 0.85, end: 1.0),
-                                      duration: const Duration(milliseconds: 200),
+                                      tween: Tween<double>(
+                                        begin: isMe ? 0.85 : 1.0, // Parte da 0.85 solo se l'ho inviato io
+                                        end: 1.0,
+                                      ),
+                                      duration: Duration(milliseconds: isMe ? 200 : 0), // Zero millisecondi se ricevuto
                                       curve: Curves.easeOutCubic,
                                       builder: (context, value, child) {
                                         return Transform.scale(scale: value, child: child);
@@ -537,8 +535,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                               if (data['mediaType'] == 'video') const Icon(Icons.play_circle_fill, size: 40, color: Colors.white),
                                               if (data['mediaType'] == 'file') Text('📁 ${data['fileName']}', style: const TextStyle(color: Colors.white)),
                                               if (data['text'] != null) Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(data['text'], style: const TextStyle(color: Colors.white, fontSize: 15))),
-                                              
-                                              // RIGA ORARIA E DOPPIE SPUNTE DI LETTURA
                                               Row(
                                                 mainAxisAlignment: MainAxisAlignment.end,
                                                 mainAxisSize: MainAxisSize.min,
@@ -579,8 +575,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     },
                   ),
                 ),
-                
-                // BARRA DI SCRITTURA E INPUT FIELD CON RISPOSTA AGGANCIATA
                 if (_repliedMessage != null)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -653,7 +647,10 @@ class _FlolkBouncyButtonState extends State<FlolkBouncyButton> with SingleTicker
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) { _controller.reverse(); widget.onTap(); },
       onTapCancel: () => _controller.reverse(),
-      child: Transform.scale(scale: _scale, child: widget.child),
+      child: Transform.scale(
+        scale: _scale,
+        child: widget.child,
+      ),
     );
   }
 }
