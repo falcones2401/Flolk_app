@@ -8,37 +8,39 @@ workflows:
       vars:
         FLUTTER_MIN_SDK_VERSION: "23"
     scripts:
-      - name: Reset e Generazione Android Conservativa
+      - name: Generazione Android con Firebase
         script: |
-          # 1. Salva temporaneamente il file google-services.json se esiste
+          # 1. Teniamo al sicuro il google-services.json che hai caricato
           if [ -f "android/app/google-services.json" ]; then
-            echo "Salvo il file google-services.json..."
             cp android/app/google-services.json ./google-services.json.bak
           fi
 
-          # 2. Rimuove e rigenera la cartella android usando i veri dati del pacchetto
+          # 2. Pulizia e rigenerazione standard (quella che faceva la build verde)
           rm -rf android
-          flutter create . --platforms=android --org com.flolk --project-name flolk
+          flutter create . --platforms=android --org com.flolk --project-name secure_chat_app
           
-          # 3. Ripristina il file google-services.json nella nuova cartella
+          # 3. Rimettiamo il file Firebase al suo posto
           if [ -f "./google-services.json.bak" ]; then
-            echo "Ripristino il file google-services.json..."
             mkdir -p android/app
             mv ./google-services.json.bak android/app/google-services.json
-          else
-            echo "ATTENZIONE: google-services.json non trovato! Assicurati che sia su GitHub in android/app/"
           fi
 
-          # 4. Applica il fix per l'errore compileSdk 36
-          echo "Forzo la configurazione di Android compileSdk a 36..."
-          cat << 'EOF' >> android/build.gradle.kts
-          rootProject.extra.set("compileSdkVersion", 36)
-          subprojects {
-              plugins.withId("com.android.application") {
-                  configure<com.android.build.gradle.BaseExtension> { compileSdkVersion(36) }
+          # 4. Forzatura vecchio stile (quella che NON rompeva file_picker)
+          echo "Forzo le proprietà di sistema..."
+          mkdir -p ~/.gradle
+          cat << 'EOF' > ~/.gradle/init.gradle
+          allprojects { project ->
+              def forceSdk = {
+                  if (project.extensions.findByName("android") != null) {
+                      project.android.compileSdkVersion = 36
+                  }
               }
-              plugins.withId("com.android.library") {
-                  configure<com.android.build.gradle.BaseExtension> { compileSdkVersion(36) }
+              if (project.state.executed) {
+                  forceSdk()
+              } else {
+                  project.afterEvaluate {
+                      forceSdk()
+                  }
               }
           }
           EOF
