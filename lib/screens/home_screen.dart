@@ -4,6 +4,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'chat_screen.dart';
 import 'auth_screen.dart';
 
+// Componente BouncyButton personalizzato se non definito altrove
+class FlolkBouncyButton extends StatelessWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const FlolkBouncyButton({super.key, required this.child, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: child,
+    );
+  }
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -151,12 +166,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       chatId = ids.join("_");
     }
 
+    // Al momento dell'apertura ripristiniamo la visibilità per noi se era stata nascosta
     await _firestore.collection('chats').doc(chatId).set({
       'id': chatId,
       'users': [_myUsername, targetUsername],
       'uids': [_myUid, targetUid],
       'lastMessage': 'Inizia a chattare...',
       'timestamp': FieldValue.serverTimestamp(),
+      'hidden_for_$_myUsername': false,
     }, SetOptions(merge: true));
 
     if (mounted) {
@@ -179,6 +196,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
       );
     }
+  }
+
+  // --- OPERAZIONI DI OPZIONI CHAT (TRE PALLINI) ---
+
+  void _togglePinChat(String chatId, bool currentPinnedStatus) async {
+    await _firestore.collection('chats').doc(chatId).set({
+      'pinned_for_$_myUsername': !currentPinnedStatus,
+    }, SetOptions(merge: true));
+  }
+
+  void _clearChatMessages(String chatId) async {
+    final messages = await _firestore.collection('chats').doc(chatId).collection('messages').get();
+    final batch = _firestore.batch();
+    for (var doc in messages.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+
+    await _firestore.collection('chats').doc(chatId).update({
+      'lastMessage': 'Chat svuotata',
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  void _hideChat(String chatId) async {
+    await _firestore.collection('chats').doc(chatId).set({
+      'hidden_for_$_myUsername': true,
+    }, SetOptions(merge: true));
   }
 
   @override
@@ -318,19 +363,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       stream: _firestore.collection('chats').where('users', arrayContains: _myUsername).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final chats = snapshot.data!.docs;
+        
+        // Filtriamo le chat nascondendo quelle impostate come "hidden" per l'utente attuale
+        var chatDocs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final isHidden = data['hidden_for_$_myUsername'] ?? false;
+          return !isHidden;
+        }).toList();
+
+        // Ordiniamo mettendo prima le chat fissate (pinned), poi per timestamp
+        chatDocs.sort((a, b) {
+          final dataA = a.data() as Map<String, dynamic>;
+          final dataB = b.data() as Map<String, dynamic>;
+          final pinA = dataA['pinned_for_$_myUsername'] ?? false;
+          final pinB = dataB['pinned_for_$_myUsername'] ?? false;
+
+          if (pinA && !pinB) return -1;
+          if (!pinA && pinB) return 1;
+
+          final Timestamp? timeA = dataA['timestamp'] as Timestamp?;
+          final Timestamp? timeB = dataB['timestamp'] as Timestamp?;
+          if (timeA == null) return 1;
+          if (timeB == null) return -1;
+          return timeB.compareTo(timeA);
+        });
+
+        if (chatDocs.isEmpty) {
+          return const Center(child: Text('Nessuna chat attiva. Cerca qualcuno!', style: TextStyle(color: Colors.grey)));
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: chats.length,
+          itemCount: chatDocs.length,
           itemBuilder: (context, index) {
-            final chat = chats[index].data() as Map<String, dynamic>;
+            final chatDoc = chatDocs[index];
+            final chat = chatDoc.data() as Map<String, dynamic>;
             final List users = chat['users'] ?? [];
             final List uids = chat['uids'] ?? [];
             
             final isSelf = users.length == 2 && users[0] == _myUsername && users[1] == _myUsername;
             final targetUsername = isSelf ? _myUsername! : users.firstWhere((name) => name != _myUsername, orElse: () => 'Utente');
             final targetUid = isSelf ? _myUid! : uids[users.indexOf(targetUsername)];
+            final isPinned = chat['pinned_for_$_myUsername'] ?? false;
 
             return StreamBuilder<DocumentSnapshot>(
               stream: _firestore.collection('users').doc(targetUid).snapshots(),
@@ -359,9 +433,61 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           )
                       ],
                     ),
-                    title: Text(isSelf ? 'Spazio Personale (Tu)' : targetUsername, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            isSelf ? 'Spazio Personale (Tu)' : targetUsername, 
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)
+                          ),
+                        ),
+                        if (isPinned)
+                          const Icon(Icons.push_pin_rounded, color: Color(0xFF6366F1), size: 16),
+                      ],
+                    ),
                     subtitle: Text(chat['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                    trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 14),
+                    trailing: PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.grey),
+                      dropdownColor: const Color(0xFF1E293B),
+                      style: ButtonStyle(padding: MaterialStateProperty.all(EdgeInsets.zero)),
+                      onSelected: (value) {
+                        if (value == 'pin') _togglePinChat(chatDoc.id, isPinned);
+                        if (value == 'clear') _clearChatMessages(chatDoc.id);
+                        if (value == 'delete') _hideChat(chatDoc.id);
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'pin',
+                          child: Row(
+                            children: [
+                              Icon(isPinned ? Icons.pin_drop_outlined : Icons.push_pin_rounded, color: Colors.white, size: 18),
+                              const SizedBox(width: 8),
+                              Text(isPinned ? 'Sblocca in alto' : 'Fissa in alto', style: const TextStyle(color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'clear',
+                          child: Row(
+                            children: [
+                              Icon(Icons.cleaning_services_rounded, color: Colors.white, size: 18),
+                              const SizedBox(width: 8),
+                              Text('Svuota chat', style: TextStyle(color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 18),
+                              const SizedBox(width: 8),
+                              Text('Elimina chat', style: TextStyle(color: Colors.redAccent)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                     onTap: () => _openChat(targetUsername, targetUid),
                   ),
                 );
@@ -413,7 +539,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(16)),
           child: SwitchListTile(
             title: const Text('Interfaccia Compatta', style: TextStyle(color: Colors.white, fontSize: 15)),
-            subtitle: const Text('Ottimizza gli spazi per schermi mobile', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            subtitle: const Text('Ottimizza gli spaces per schermi mobile', style: TextStyle(color: Colors.grey, fontSize: 12)),
             value: _compactMode,
             activeColor: const Color(0xFF6366F1),
             onChanged: (val) => setState(() => _compactMode = val),
