@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'chat_screen.dart';
 import 'auth_screen.dart';
+import '../main.dart'; // Importa la chiave globale del messenger dal main.dart
 
 class FlolkBouncyButton extends StatelessWidget {
   final Widget child;
@@ -85,13 +86,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  // FIX SCHERMATA NERA: Gestione errori e timeout sul recupero del profilo
   void _loadMyProfile() async {
     final user = _auth.currentUser;
     if (user != null) {
       _myUid = user.uid;
       try {
-        // Se Firestore non risponde entro 5 secondi lancia un'eccezione e sblocca l'app
         final doc = await _firestore.collection('users').doc(user.uid).get().timeout(const Duration(seconds: 5));
         if (doc.exists && doc.data() != null) {
           _myUsername = doc.get('username');
@@ -100,7 +99,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       } catch (e) {
         debugPrint("Errore o Timeout nel caricamento del profilo Firestore: $e");
-        // Non blocchiamo l'applicazione; lasciamo che vada avanti per mostrare la UI di creazione profilo o login
       }
     }
     if (mounted) {
@@ -136,7 +134,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       final existing = await _firestore.collection('users').where('searchName', isEqualTo: searchName).get();
       if (existing.docs.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        // CORREZIONE: Utilizzo di scaffoldMessengerKey per evitare crash di contesto
+        scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(content: Text('Questo username è già preso!'), backgroundColor: Colors.redAccent),
         );
         return;
@@ -157,7 +156,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       });
       _autoCreateSelfChat();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      // CORREZIONE: Utilizzo di scaffoldMessengerKey per evitare crash di contesto
+      scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(content: Text('Errore durante il salvataggio: $e'), backgroundColor: Colors.redAccent),
       );
     }
