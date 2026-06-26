@@ -39,11 +39,11 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Cartella assets per l'icona dell'applicazione
+  # Cartella assets per l'icona dell'applicazione (Sintassi corretta per Codemagic)
   assets:
     - assets/icon/
 
-# Configurazione specifica per la generazione dell'icona
+# Configurazione specifica per la generazione dell'icona (Allineata a sinistra)
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
