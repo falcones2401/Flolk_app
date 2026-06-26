@@ -16,7 +16,7 @@ class FlolkApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flolk', // Il tuo nuovo nome
+      title: 'Flolk',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -26,8 +26,21 @@ class FlolkApp extends StatelessWidget {
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          // Se snapshot ha dati, l'utente è loggato (Dispositivo registrato)
+          // GESTIONE ATTESA: Se Firebase sta caricando, mostra una rotella di caricamento
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A884)),
+                ),
+              ),
+            );
+          }
+          
+          // Se snapshot ha dati, l'utente è loggato
           if (snapshot.hasData) return const HomeScreen();
+          
+          // Altrimenti mostra la schermata di login
           return const AuthScreen();
         },
       ),
