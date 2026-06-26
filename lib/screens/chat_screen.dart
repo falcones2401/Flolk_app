@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -81,7 +83,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       'mediaType': mediaType,
       'mediaUrl': mediaUrl,
       'fileName': fileName,
-      'deleted_for': [], // Lista per tracciare chi cancella il messaggio "per sé"
+      'deleted_for': [],
+      'reactions': {}, // Mappa per memorizzare username: emoji
     });
 
     String lastMsgDesc = text;
@@ -100,15 +103,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         if (_scrollController.hasClients) {
           _scrollController.animateTo(
             0.0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutCubic,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.elasticOut, // Animazione rimbalzo ancora più marcata
           );
         }
       });
     }
   }
 
-  // --- CARICAMENTO REALE DEI FILE MULTIMEDIALI ---
   Future<void> _uploadAndSendMedia(String filePath, String type, String name) async {
     setState(() => _isUploading = true);
     try {
@@ -127,6 +129,194 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     } finally {
       setState(() => _isUploading = false);
     }
+  }
+
+  // --- REAZIONI CON EMOJI A SCOMPARSA FLUIDA ---
+  void _toggleReaction(String messageId, Map currentReactions, String emoji) async {
+    Map updatedReactions = Map.from(currentReactions);
+    if (updatedReactions[widget.myUsername] == emoji) {
+      updatedReactions.remove(widget.myUsername); // Rimuove se cliccata di nuovo
+    } else {
+      updatedReactions[widget.myUsername] = emoji; // Aggiunge o aggiorna
+    }
+
+    await _firestore
+        .collection('chats')
+        .doc(widget.chatId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'reactions': updatedReactions});
+  }
+
+  // --- INTERFACCIA POPUP REAZIONI + OPZIONI TRE PALLINI ---
+  void _showMessageActions(String messageId, Map data, bool isMe, List deletedFor) {
+    final List<String> emojis = ['👍', '❤️', '😂', '😮', '😥', '🙏'];
+    final Map reactions = data['reactions'] ?? {};
+    final String? textContent = data['text'];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Riga delle Emoji Animate
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: emojis.map((emoji) {
+                    final isSelected = reactions[widget.myUsername] == emoji;
+                    return FlolkBouncyButton(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _toggleReaction(messageId, reactions, emoji);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFF6366F1).withOpacity(0.3) : Colors.transparent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const Divider(color: Colors.white10, height: 20),
+              // Copia Testo (Se presente)
+              if (textContent != null)
+                ListTile(
+                  leading: const Icon(Icons.copy_rounded, color: Colors.white70),
+                  title: const Text('Copia testo', style: TextStyle(color: Colors.white)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Clipboard.setData(ClipboardData(text: textContent));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Testo copiato negli appunti!'), duration: Duration(seconds: 1)),
+                    );
+                  },
+                ),
+              // Info Dettagliate Messaggio
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded, color: Colors.white70),
+                title: const Text('Dettagli messaggio', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showIdDetails(data);
+                },
+              ),
+              // Elimina Locale
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+                title: const Text('Elimina per me', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDeleteDialog(messageId, false, deletedFor);
+                },
+              ),
+              // Elimina Globale
+              if (isMe)
+                ListTile(
+                  leading: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+                  title: const Text('Elimina per tutti', style: TextStyle(color: Colors.redAccent)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmDeleteDialog(messageId, true, deletedFor);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- POPUP DI CONFERMA ELIMINAZIONE RICHIESTO ---
+  void _confirmDeleteDialog(String messageId, bool deleteForEveryone, List deletedFor) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 10),
+            Text('Sei sicuro?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          deleteForEveryone 
+            ? 'Questo messaggio verrà rimosso definitivamente per tutti i partecipanti alla chat.' 
+            : 'Questo messaggio non sarà più visibile sul tuo dispositivo.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annulla', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              if (deleteForEveryone) {
+                await _firestore.collection('chats').doc(widget.chatId).collection('messages').doc(messageId).delete();
+              } else {
+                List updatedDeleted = List.from(deletedFor);
+                if (!updatedDeleted.contains(widget.myUsername)) {
+                  updatedDeleted.add(widget.myUsername);
+                }
+                await _firestore.collection('chats').doc(widget.chatId).collection('messages').doc(messageId).update({
+                  'deleted_for': updatedDeleted,
+                });
+              }
+            },
+            child: const Text('Elimina', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- FINESTRA DETTAGLI MESSAGGIO ---
+  void _showIdDetails(Map data) {
+    final Timestamp? timestamp = data['timestamp'] as Timestamp?;
+    final String timeStr = timestamp != null 
+        ? DateFormat('dd/MM/yyyy HH:mm:ss').format(timestamp.toDate()) 
+        : 'Inviando...';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Info Messaggio', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Mittente: @${data['sender']}', style: const TextStyle(color: Colors.white)),
+            const SizedBox(height: 8),
+            Text('Data Invio: $timeStr', style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 8),
+            Text('Tipo: ${data['mediaType'] ?? 'Testo'}', style: const TextStyle(color: Colors.white70)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK', style: TextStyle(color: Color(0xFF6366F1))))
+        ],
+      ),
+    );
   }
 
   void _openMediaMenu() {
@@ -188,7 +378,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  // --- POPUP INFO UTENTE IN ALTO ---
   void _showTargetProfileInfo() async {
     final userDoc = await _firestore.collection('users').doc(widget.targetUid).get();
     if (!userDoc.exists || !mounted) return;
@@ -222,45 +411,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Chiudi', style: TextStyle(color: Color(0xFF6366F1))))
         ],
-      ),
-    );
-  }
-
-  // --- MENU CANCELLAZIONE MESSAGGI (PRESSIONE PROLUNGATA) ---
-  void _showOptionsMessage(String messageId, bool isMe, List deletedFor) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.delete_outline_rounded, color: Colors.white),
-              title: const Text('Elimina per me', style: TextStyle(color: Colors.white)),
-              onTap: () async {
-                Navigator.pop(ctx);
-                List updatedDeleted = List.from(deletedFor);
-                if (!updatedDeleted.contains(widget.myUsername)) {
-                  updatedDeleted.add(widget.myUsername);
-                }
-                await _firestore.collection('chats').doc(widget.chatId).collection('messages').doc(messageId).update({
-                  'deleted_for': updatedDeleted,
-                });
-              },
-            ),
-            if (isMe)
-              ListTile(
-                leading: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
-                title: const Text('Elimina per tutti', style: TextStyle(color: Colors.redAccent)),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await _firestore.collection('chats').doc(widget.chatId).collection('messages').doc(messageId).delete();
-                },
-              ),
-          ],
-        ),
       ),
     );
   }
@@ -313,7 +463,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     const SizedBox(width: 12),
                     Expanded(
                       child: FlolkBouncyButton(
-                        onTap: _showTargetProfileInfo, // Cliccando sulla barra in alto apre le info contatto
+                        onTap: _showTargetProfileInfo,
                         child: StreamBuilder<DocumentSnapshot>(
                           stream: _firestore.collection('users').doc(widget.targetUid).snapshots(),
                           builder: (context, snapshot) {
@@ -353,7 +503,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)));
                   
-                  // Filtriamo via i messaggi cancellati localmente dall'utente corrente
                   final docs = snapshot.data!.docs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     final List deletedFor = data['deleted_for'] ?? [];
@@ -370,70 +519,120 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       final data = docs[index].data() as Map<String, dynamic>;
                       final bool isMe = data['sender'] == widget.myUsername;
                       final List deletedFor = data['deleted_for'] ?? [];
+                      final Map reactions = data['reactions'] ?? {};
 
-                      return GestureDetector(
-                        onLongPress: () => _showOptionsMessage(docId, isMe, deletedFor), // Click prolungato per eliminare
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween<double>(begin: 0.0, end: 1.0),
-                          duration: const Duration(milliseconds: 280),
-                          curve: Curves.linearToEaseOut,
-                          builder: (context, value, child) {
-                            return Transform.translate(
-                              offset: Offset(0, 20 * (1 - value)),
-                              child: Opacity(opacity: value, child: child),
-                            );
-                          },
-                          child: Align(
-                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              padding: const EdgeInsets.all(12),
-                              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                              decoration: BoxDecoration(
-                                color: isMe ? const Color(0xFF6366F1) : const Color(0xFF1E293B),
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (data['mediaType'] == 'image')
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Image.network(data['mediaUrl'], fit: BoxFit.cover),
+                      return Align(
+                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Stack(
+                            clipBehavior: ClipNone,
+                            children: [
+                              // Gestione Animata Avanzata d'Ingresso del Messaggio
+                              TweenAnimationBuilder<double>(
+                                tween: Tween<double>(begin: 0.0, end: 1.0),
+                                duration: const Duration(milliseconds: 350),
+                                curve: Curves.backOut, // Effetto pop morbido in entrata
+                                builder: (context, value, child) {
+                                  return Transform.scale(
+                                    scale: value,
+                                    alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                                    child: Opacity(opacity: value, child: child),
+                                  );
+                                },
+                                child: GestureDetector(
+                                  onLongPress: () => _showMessageActions(docId, data, isMe, deletedFor),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+                                    decoration: BoxDecoration(
+                                      color: isMe ? const Color(0xFF6366F1) : const Color(0xFF1E293B),
+                                      borderRadius: BorderRadius.only(
+                                        topLeft: const Radius.circular(18),
+                                        topRight: const Radius.circular(18),
+                                        bottomLeft: Radius.circular(isMe ? 18 : 4),
+                                        bottomRight: Radius.circular(isMe ? 4 : 18),
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.08),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        )
+                                      ],
                                     ),
-                                  if (data['mediaType'] == 'video')
-                                    Container(
-                                      height: 150,
-                                      decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(12)),
-                                      child: const Center(child: Icon(Icons.play_circle_fill_rounded, size: 50, color: Colors.white)),
-                                    ),
-                                  if (data['mediaType'] == 'file')
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10)),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.insert_drive_file_rounded, color: Colors.white70),
-                                          const SizedBox(width: 8),
-                                          Flexible(
-                                            child: Text(
-                                              data['fileName'] ?? 'Documento',
-                                              style: const TextStyle(color: Colors.white, fontSize: 13),
-                                              overflow: TextOverflow.ellipsis,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (data['mediaType'] == 'image')
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(12),
+                                            child: Image.network(data['mediaUrl'], fit: BoxFit.cover),
+                                          ),
+                                        if (data['mediaType'] == 'video')
+                                          Container(
+                                            height: 150,
+                                            decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(12)),
+                                            child: const Center(child: Icon(Icons.play_circle_fill_rounded, size: 50, color: Colors.white)),
+                                          ),
+                                        if (data['mediaType'] == 'file')
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10)),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.insert_drive_file_rounded, color: Colors.white70),
+                                                const SizedBox(width: 8),
+                                                Flexible(
+                                                  child: Text(
+                                                    data['fileName'] ?? 'Documento',
+                                                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                        ],
+                                        if (data['text'] != null)
+                                          Padding(
+                                            padding: EdgeInsets.only(top: data['mediaType'] != null ? 8.0 : 0, bottom: reationsOffsetPadding(reactions)),
+                                            child: Text(data['text'], style: const TextStyle(color: Colors.white, fontSize: 15)),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Visualizzazione Badge delle Emoji di Reazione
+                              if (reactions.isNotEmpty)
+                                Positioned(
+                                  bottom: -8,
+                                  right: isMe ? null : 10,
+                                  left: isMe ? 10 : null,
+                                  child: TweenAnimationBuilder<double>(
+                                    tween: Tween<double>(begin: 0.0, end: 1.0),
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.elasticOut,
+                                    builder: (context, val, child) => Transform.scale(scale: val, child: child),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F172A),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFF1E293B), width: 1.5),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: reactions.values.toSet().map((emoji) {
+                                          return Text(emoji.toString(), style: const TextStyle(fontSize: 12));
+                                        }).toList(),
                                       ),
                                     ),
-                                  if (data['text'] != null)
-                                    Padding(
-                                      padding: EdgeInsets.only(top: data['mediaType'] != null ? 8.0 : 0),
-                                      child: Text(data['text'], style: const TextStyle(color: Colors.white, fontSize: 15)),
-                                    ),
-                                ],
-                              ),
-                            ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       );
@@ -494,7 +693,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 child: Row(
                   children: [
                     FlolkBouncyButton(
-                      onTap: _openMediaMenu, // Menu modificato con le funzioni reali
+                      onTap: _openMediaMenu,
                       child: const Padding(
                         padding: EdgeInsets.all(8.0),
                         child: Icon(Icons.add_rounded, color: Color(0xFF6366F1), size: 26),
@@ -534,6 +733,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  double reationsOffsetPadding(Map reactions) {
+    return reactions.isNotEmpty ? 6.0 : 0.0;
   }
 }
 
