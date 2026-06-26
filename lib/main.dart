@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/date_symbol_data_local.dart';
-import 'screens/auth_screen.dart';
+import 'package:intl/date_symbol_data_local.dart'; // Inizializzatore nativo per le date
 import 'screens/home_screen.dart';
+import 'screens/auth_screen.dart';
 
 void main() async {
-  // Assicura il legame con i canali nativi
+  // 1. Vincola i canali nativi Android/iOS
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Protezione globale dai crash visivi
+  // 2. Intercettatore globale dei crash
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
   };
@@ -20,15 +20,15 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // Funzione asincrona che prepara l'ambiente PRIMA di dare accesso all'interfaccia
-  Future<void> _initializeServices() async {
+  // Funzione asincrona bloccante: l'app NON si apre finché questi due non hanno finito
+  Future<void> _initServices() async {
     await Firebase.initializeApp();
     await initializeDateFormatting('it_IT', null);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Schermata di errore personalizzata in caso di altri problemi logici interni
+    // Schermata di crash logico personalizzata
     ErrorWidget.builder = (FlutterErrorDetails details) {
       return Scaffold(
         backgroundColor: const Color(0xFF7F1D1D),
@@ -55,19 +55,18 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF6366F1),
           brightness: Brightness.dark,
+          primary: const Color(0xFF6366F1),
+          surface: const Color(0xFF1E293B),
         ),
         useMaterial3: true,
       ),
-      // Usiamo un FutureBuilder globale: Finché Firebase non ha finito l'inizializzazione nativa,
-      // l'app mostra uno splash screen scuro con caricamento protetto, evitando il crash.
+      // FutureBuilder protettivo: mostra un caricamento pulito finché Firebase non risponde
       home: FutureBuilder(
-        future: _initializeServices(),
+        future: _initServices(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {
             return const AuthGate();
           }
-          
-          // Schermata di caricamento iniziale sicura (Splash Screen temporaneo di pochissimi millisecondi)
           return const Scaffold(
             backgroundColor: Color(0xFF0F172A),
             body: Center(
