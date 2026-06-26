@@ -3,10 +3,17 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
+// IMPORTANTE: Importiamo le opzioni di Firebase
+import 'services/firebase_options.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  
+  // Inizializzazione corretta passando le opzioni della piattaforma
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(const FlolkApp());
 }
 
@@ -26,7 +33,7 @@ class FlolkApp extends StatelessWidget {
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          // GESTIONE ATTESA: Se Firebase sta caricando, mostra una rotella di caricamento
+          // Se Firebase sta caricando lo stato di login, mostra la rotella verde
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
               body: Center(
@@ -37,10 +44,10 @@ class FlolkApp extends StatelessWidget {
             );
           }
           
-          // Se snapshot ha dati, l'utente è loggato
+          // Se l'utente è loggato, vai alla Home
           if (snapshot.hasData) return const HomeScreen();
           
-          // Altrimenti mostra la schermata di login
+          // Altrimenti mostra la schermata di login/registrazione
           return const AuthScreen();
         },
       ),
