@@ -38,6 +38,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   late AnimationController _typingController;
   bool _isUploading = false;
 
+  // Stato per gestire il messaggio a cui si sta rispondendo
+  Map<String, dynamic>? _repliedMessage;
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +77,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     final now = FieldValue.serverTimestamp();
 
+    // Prepariamo i dati della risposta se presenti
+    Map<String, dynamic>? replyData;
+    if (_repliedMessage != null) {
+      replyData = {
+        'messageId': _repliedMessage!['id'],
+        'sender': _repliedMessage!['sender'],
+        'text': _repliedMessage!['text'],
+        'mediaType': _repliedMessage!['mediaType'],
+      };
+    }
+
     await _firestore.collection('chats').doc(widget.chatId).collection('messages').add({
       'text': text.isEmpty ? null : text,
       'sender': widget.myUsername,
@@ -83,6 +97,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       'fileName': fileName,
       'deleted_for': [],
       'reactions': {}, 
+      'replyTo': replyData, // Salva la risposta nel database
     });
 
     String lastMsgDesc = text;
@@ -94,6 +109,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       'lastMessage': lastMsgDesc,
       'timestamp': now,
       'typing_${widget.myUsername}': false,
+    });
+
+    // Resetta lo stato della risposta dopo l'invio
+    setState(() {
+      _repliedMessage = null;
     });
 
     if (widget.specialSendAnimation) {
@@ -112,12 +132,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   Future<void> _uploadAndSendMedia(String filePath, String type, String name) async {
     setState(() => _isUploading = true);
     try {
-      // Nota: Firebase Storage è stato rimosso. 
       // TODO: Integra qui la tua chiamata API o SDK di Cloudinary per caricare il file.
-      // Esempio fittizio del link ottenuto da Cloudinary:
       String cloudinaryUrl = "https://res.cloudinary.com/..."; 
 
-      // Una volta ottenuto il link da Cloudinary, inviamo il messaggio su Firestore:
       _sendMessage(mediaType: type, mediaUrl: cloudinaryUrl, fileName: name);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -183,6 +200,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ),
               ),
               const Divider(color: Colors.white10, height: 20),
+              ListTile(
+                leading: const Icon(Icons.reply_rounded, color: Colors.white70),
+                title: const Text('Rispondi', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _repliedMessage = {
+                      'id': messageId,
+                      'sender': data['sender'],
+                      'text': data['text'],
+                      'mediaType': data['mediaType'],
+                    };
+                  });
+                  _focusNode.requestFocus();
+                },
+              ),
               if (textContent != null)
                 ListTile(
                   leading: const Icon(Icons.copy_rounded, color: Colors.white70),
@@ -552,6 +585,35 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        // RENDER GRAFICO DEL MESSAGGIO A CUI HAI RISPOSTO (SE ESISTE)
+                                        if (data['replyTo'] != null)
+                                          Container(
+                                            margin: const EdgeInsets.bottom(8),
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withOpacity(0.15),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: const Border(
+                                                left: BorderSide(color: Color(0xFF6366F1), width: 3),
+                                              ),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  data['replyTo']['sender'] == widget.myUsername ? 'Tu' : '@${data['replyTo']['sender']}',
+                                                  style: const TextStyle(color: Color(0xFF818CF8), fontSize: 12, fontWeight: FontWeight.bold),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  data['replyTo']['text'] ?? (data['replyTo']['mediaType'] != null ? '📷 Allegato multimediale' : 'Messaggio'),
+                                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
                                         if (data['mediaType'] == 'image')
                                           ClipRRect(
                                             borderRadius: BorderRadius.circular(12),
@@ -671,13 +733,59 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 );
               },
             ),
+            
+            // UI DELLA BARRA DI RISPOSTA (COMPARE SOPRA L'INPUT FIELD)
+            if (_repliedMessage != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1E293B),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.reply_rounded, color: Color(0xFF6366F1), size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _repliedMessage!['sender'] == widget.myUsername ? 'Rispondi a te stesso' : 'Rispondi a @${_repliedMessage!['sender']}',
+                            style: const TextStyle(color: Color(0xFF6366F1), fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _repliedMessage!['text'] ?? (_repliedMessage!['mediaType'] != null ? '📁 File/Media' : ''),
+                            style: const TextStyle(color: Colors.grey, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 20),
+                      onPressed: () {
+                        setState(() {
+                          _repliedMessage = null;
+                        });
+                      },
+                    )
+                  ],
+                ),
+              ),
+
             Padding(
               padding: const EdgeInsets.all(12),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(32),
+                  borderRadius: _repliedMessage != null 
+                    ? const BorderRadius.vertical(bottom: Radius.circular(32))
+                    : BorderRadius.circular(32),
                 ),
                 child: Row(
                   children: [
