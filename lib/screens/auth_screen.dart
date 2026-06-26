@@ -100,6 +100,7 @@ class _AuthScreenState extends State<AuthScreen> {
           await userCredential.user!.sendEmailVerification();
 
           // Creiamo il record temporaneo su Firestore contrassegnando l'account come non verificato
+          // NOTA: Viene eseguito PRIMA del signOut così non fallisce per via delle Security Rules
           await _firestore.collection('users').doc(userCredential.user!.uid).set({
             'uid': userCredential.user!.uid,
             'email': email,
@@ -110,6 +111,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
           // Scolleghiamo l'utente immediatamente costringendolo a verificare la mail
           await _auth.signOut();
+
+          if (!mounted) return;
 
           showDialog(
             context: context,
@@ -155,7 +158,7 @@ class _AuthScreenState extends State<AuthScreen> {
       _showError(errorMessage);
     } catch (e) {
       _showError("Errore imprevisto: $e");
-    } finally {
+    } final {
       if (mounted) setState(() => _isLoading = false);
     }
   }
