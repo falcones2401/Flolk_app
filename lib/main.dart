@@ -1,28 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/date_symbol_data_local.dart'; // IMPORTANTE: Per inizializzare i dati delle date
+import 'package:intl/date_symbol_data_local.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
-  // 1. Assicura il legame con i canali nativi di Android/iOS
+  // Assicura il legame con i canali nativi
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 2. Protezione totale dai crash di rendering (Cattura l'errore e lo mostra a schermo)
+  // Protezione globale dai crash visivi
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
   };
-
-  try {
-    // 3. Inizializza i pacchetti delle date per evitare crash a runtime
-    await initializeDateFormatting('it_IT', null);
-    
-    // 4. Inizializzazione nativa di Firebase
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint("Errore critico in fase di avvio: $e");
-  }
 
   runApp(const MyApp());
 }
@@ -30,10 +20,15 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  // Funzione asincrona che prepara l'ambiente PRIMA di dare accesso all'interfaccia
+  Future<void> _initializeServices() async {
+    await Firebase.initializeApp();
+    await initializeDateFormatting('it_IT', null);
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Gestore degli errori visivi globale: se un widget crasha, vedrai l'errore scritto su sfondo rosso
-    // invece dello schermo bianco vuoto della morte di Codemagic.
+    // Schermata di errore personalizzata in caso di altri problemi logici interni
     ErrorWidget.builder = (FlutterErrorDetails details) {
       return Scaffold(
         backgroundColor: const Color(0xFF7F1D1D),
@@ -42,7 +37,7 @@ class MyApp extends StatelessWidget {
           child: Center(
             child: SingleChildScrollView(
               child: Text(
-                "CRASH RUNTME FLUTTER:\n\n${details.exception}\n\n${details.stack}",
+                "CRASH RUNTIME FLUTTER:\n\n${details.exception}\n\n${details.stack}",
                 style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
               ),
             ),
@@ -63,7 +58,24 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const AuthGate(),
+      // Usiamo un FutureBuilder globale: Finché Firebase non ha finito l'inizializzazione nativa,
+      // l'app mostra uno splash screen scuro con caricamento protetto, evitando il crash.
+      home: FutureBuilder(
+        future: _initializeServices(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done) {
+            return const AuthGate();
+          }
+          
+          // Schermata di caricamento iniziale sicura (Splash Screen temporaneo di pochissimi millisecondi)
+          return const Scaffold(
+            backgroundColor: Color(0xFF0F172A),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF6366F1)),
+            ),
+          );
+        },
+      ),
     );
   }
 }
