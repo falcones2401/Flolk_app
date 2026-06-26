@@ -5,8 +5,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
 
+// CHIAVE GLOBALE: Permette di inviare SnackBar da qualsiasi punto dell'applicazione senza crash
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 void main() {
-  // Assicura il legame con i canali nativi prima di fare qualsiasi cosa
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
@@ -14,7 +16,6 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // Forza l'applicazione ad aspettare le configurazioni native di Firebase e delle date
   Future<void> _initializeFirebaseAndDates() async {
     await Firebase.initializeApp();
     await initializeDateFormatting('it_IT', null);
@@ -25,6 +26,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flolk Chat',
       debugShowCheckedModeBanner: false,
+      // Agganciamo la chiave globale qui
+      scaffoldMessengerKey: scaffoldMessengerKey,
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0F172A),
@@ -34,11 +37,9 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      // Il FutureBuilder blocca l'app finché Firebase non è pronto al 100%
       home: FutureBuilder(
         future: _initializeFirebaseAndDates(),
         builder: (context, snapshot) {
-          // Se Firebase fallisce l'avvio nativo, intercettiamo l'errore qui!
           if (snapshot.hasError) {
             return Scaffold(
               backgroundColor: const Color(0xFF7F1D1D),
@@ -47,7 +48,7 @@ class MyApp extends StatelessWidget {
                 child: Center(
                   child: SingleChildScrollView(
                     child: Text(
-                      "ERRORE CRITICO DI CONFIGURAZIONE:\n\n${snapshot.error}\n\nVerifica che il file google-services.json sia presente in android/app/",
+                      "ERRORE CRITICO DI CONFIGURAZIONE:\n\n${snapshot.error}",
                       style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 14),
                     ),
                   ),
@@ -56,12 +57,10 @@ class MyApp extends StatelessWidget {
             );
           }
 
-          // Se ha finito l'inizializzazione con successo, passa alla verifica dell'utente
           if (snapshot.connectionState == ConnectionState.done) {
             return const AuthGate();
           }
 
-          // Schermata di caricamento temporanea (Splash Screen)
           return const Scaffold(
             backgroundColor: Color(0xFF0F172A),
             body: Center(
