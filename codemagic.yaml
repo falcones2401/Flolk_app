@@ -29,7 +29,7 @@ workflows:
             echo "ATTENZIONE: google-services.json non trovato! Assicurati che sia su GitHub in android/app/"
           fi
 
-          # 4. Applica il fix per l'errore compileSdk 36 (visto nei passaggi precedenti)
+          # 4. Applica il fix per l'errore compileSdk 36
           echo "Forzo la configurazione di Android compileSdk a 36..."
           cat << 'EOF' >> android/build.gradle.kts
           rootProject.extra.set("compileSdkVersion", 36)
