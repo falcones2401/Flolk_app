@@ -1,41 +1,34 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core;
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'screens/login_screen.dart'; // Sostituisci con i tuoi path reali
-import 'screens/home_screen.dart';  // Sostituisci con i tuoi path reali
+import 'screens/auth_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  runApp(const SecureChatApp());
+  runApp(const FlolkApp());
 }
 
-class SecureChatApp extends StatelessWidget {
-  const SecureChatApp({super.key});
+class FlolkApp extends StatelessWidget {
+  const FlolkApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Secure Chat',
+      title: 'Flolk', // Il tuo nuovo nome
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        brightness: Brightness.dark,
+        primaryColor: const Color(0xFF00A884),
+        scaffoldBackgroundColor: const Color(0xFF0B141A),
       ),
-      // Usa StreamBuilder per sentire se l'utente è già loggato sul dispositivo
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (snapshot.hasData) {
-            // Se l'utente esiste, vai dritto alla Home senza mostrare il login
-            return const HomeScreen();
-          }
-          // Altrimenti, mostra la schermata di login
-          return const LoginScreen();
+          // Se snapshot ha dati, l'utente è loggato (Dispositivo registrato)
+          if (snapshot.hasData) return const HomeScreen();
+          return const AuthScreen();
         },
       ),
     );
