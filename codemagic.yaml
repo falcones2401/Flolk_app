@@ -16,12 +16,17 @@ workflows:
           echo "Forzo la configurazione di Android compileSdk a 36..."
           cat << 'EOF' >> android/build.gradle.kts
 
+          rootProject.extra.set("compileSdkVersion", 36)
+
           subprojects {
-              afterEvaluate {
-                  if (project.plugins.hasPlugin("com.android.application") || project.plugins.hasPlugin("com.android.library")) {
-                      configure<com.android.build.gradle.BaseExtension> {
-                          compileSdkVersion(36)
-                      }
+              plugins.withId("com.android.application") {
+                  configure<com.android.build.gradle.BaseExtension> {
+                      compileSdkVersion(36)
+                  }
+              }
+              plugins.withId("com.android.library") {
+                  configure<com.android.build.gradle.BaseExtension> {
+                      compileSdkVersion(36)
                   }
               }
           }
