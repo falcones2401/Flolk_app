@@ -236,8 +236,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
             SizedBox(width: 10),
             Text('Sei sicuro?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -587,7 +587,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                           ),
                                         if (data['text'] != null)
                                           Padding(
-                                            padding: EdgeInsets.only(top: data['mediaType'] != null ? 8.0 : 0, bottom: reationsOffsetPadding(reactions)),
+                                            padding: EdgeInsets.only(
+                                              top: data['mediaType'] != null ? 8.0 : 0, 
+                                              bottom: reationsOffsetPadding(reactions),
+                                            ),
                                             child: Text(data['text'], style: const TextStyle(color: Colors.white, fontSize: 15)),
                                           ),
                                       ],
@@ -701,7 +704,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                           enabledBorder: InputBorder.none,
                           errorBorder: InputBorder.none,
                           disabledBorder: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 4),
                         ),
                         onSubmitted: (_) => _sendMessage(),
                       ),
