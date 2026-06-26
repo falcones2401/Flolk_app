@@ -1,17 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/date_symbol_data_local.dart'; // IMPORTANTE: Per inizializzare i dati delle date
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
+  // 1. Assicura il legame con i canali nativi di Android/iOS
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 2. Protezione totale dai crash di rendering (Cattura l'errore e lo mostra a schermo)
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+  };
+
   try {
-    // Inizializzazione nativa protetta da timeout
-    await Firebase.initializeApp().timeout(const Duration(seconds: 8));
+    // 3. Inizializza i pacchetti delle date per evitare crash a runtime
+    await initializeDateFormatting('it_IT', null);
+    
+    // 4. Inizializzazione nativa di Firebase
+    await Firebase.initializeApp();
   } catch (e) {
-    debugPrint("Errore inizializzazione Firebase: $e");
+    debugPrint("Errore critico in fase di avvio: $e");
   }
+
   runApp(const MyApp());
 }
 
@@ -20,18 +32,34 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Gestore degli errori visivi globale: se un widget crasha, vedrai l'errore scritto su sfondo rosso
+    // invece dello schermo bianco vuoto della morte di Codemagic.
+    ErrorWidget.builder = (FlutterErrorDetails details) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF7F1D1D),
+        body: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Center(
+            child: SingleChildScrollView(
+              child: Text(
+                "CRASH RUNTME FLUTTER:\n\n${details.exception}\n\n${details.stack}",
+                style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
+              ),
+            ),
+          ),
+        ),
+      );
+    };
+
     return MaterialApp(
       title: 'Flolk Chat',
       debugShowCheckedModeBanner: false,
-      // Tema scuro nativo corretto senza conflitti di costanti
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0F172A),
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF6366F1),
           brightness: Brightness.dark,
-          primary: const Color(0xFF6366F1),
-          surface: const Color(0xFF1E293B),
         ),
         useMaterial3: true,
       ),
@@ -48,7 +76,6 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // Se Firebase sta ancora caricando i token locali, Scaffold scuro di sicurezza
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             backgroundColor: Color(0xFF0F172A),
@@ -60,17 +87,12 @@ class AuthGate extends StatelessWidget {
 
         if (snapshot.hasData && snapshot.data != null) {
           final user = snapshot.data!;
-
-          // Se l'utente non è verificato via mail, va alla schermata di Auth
           if (!user.emailVerified) {
             return const AuthScreen();
           }
-
-          // Altrimenti sblocca ed entra nella HomeScreen
           return const HomeScreen();
         }
 
-        // Se non è loggato, mostra Login
         return const AuthScreen();
       },
     );
