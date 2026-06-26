@@ -14,12 +14,11 @@ dependencies:
   # Icone iOS/Android standard
   cupertino_icons: ^1.0.6
 
-  # Firebase Core e Storage (Versioni allineate e compatibili tra loro)
+  # Firebase Core e Firestore (Senza Storage!)
   firebase_core: ^2.24.0
-  firebase_storage: ^11.6.5
   cloud_firestore: ^4.14.0
 
-  # Gestione dei File e delle Immagini nella chat
+  # Gestione dei File e delle Immagini nella chat (per pescare i file da mandare a Cloudinary)
   image_picker: ^1.0.7
   file_picker: ^6.1.1
 
