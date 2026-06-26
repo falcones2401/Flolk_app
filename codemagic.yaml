@@ -12,6 +12,20 @@ workflows:
         script: |
           rm -rf android
           flutter create . --platforms=android --org com.flolk --project-name secure_chat_app
+          
+          echo "Forzo la configurazione di Android compileSdk a 36..."
+          cat << 'EOF' >> android/build.gradle.kts
+
+          subprojects {
+              afterEvaluate {
+                  if (project.plugins.hasPlugin("com.android.application") || project.plugins.hasPlugin("com.android.library")) {
+                      configure<com.android.build.gradle.BaseExtension> {
+                          compileSdkVersion(36)
+                      }
+                  }
+              }
+          }
+          EOF
       - name: Generazione Icona e Nome App
         script: |
           flutter pub get
