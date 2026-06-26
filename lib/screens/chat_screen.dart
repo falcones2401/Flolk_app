@@ -31,7 +31,6 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final _firestore = FirebaseFirestore.instance;
-  final _storage = FirebaseStorage.instance;
   final _messageController = TextEditingController();
   final _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
@@ -113,14 +112,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   Future<void> _uploadAndSendMedia(String filePath, String type, String name) async {
     setState(() => _isUploading = true);
     try {
-      String ext = filePath.split('.').last;
-      String storagePath = 'chats/${widget.chatId}/${DateTime.now().millisecondsSinceEpoch}.$ext';
-      
-      UploadTask uploadTask = _storage.ref().child(storagePath).putFile(File(filePath));
-      TaskSnapshot snapshot = await uploadTask;
-      String downloadUrl = await snapshot.ref.getDownloadURL();
+      // Nota: Firebase Storage è stato rimosso. 
+      // TODO: Integra qui la tua chiamata API o SDK di Cloudinary per caricare il file.
+      // Esempio fittizio del link ottenuto da Cloudinary:
+      String cloudinaryUrl = "https://res.cloudinary.com/..."; 
 
-      _sendMessage(mediaType: type, mediaUrl: downloadUrl, fileName: name);
+      // Una volta ottenuto il link da Cloudinary, inviamo il messaggio su Firestore:
+      _sendMessage(mediaType: type, mediaUrl: cloudinaryUrl, fileName: name);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Errore durante l\'invio del file: $e'), backgroundColor: Colors.redAccent),
