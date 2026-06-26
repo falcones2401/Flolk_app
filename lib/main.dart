@@ -1,51 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/date_symbol_data_local.dart'; // Inizializzatore nativo per le date
+import 'package:intl/date_symbol_data_local.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
 
-void main() async {
-  // 1. Vincola i canali nativi Android/iOS
+void main() {
+  // Assicura il legame con i canali nativi prima di fare qualsiasi cosa
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // 2. Intercettatore globale dei crash
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-  };
-
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // Funzione asincrona bloccante: l'app NON si apre finché questi due non hanno finito
-  Future<void> _initServices() async {
+  // Forza l'applicazione ad aspettare le configurazioni native di Firebase e delle date
+  Future<void> _initializeFirebaseAndDates() async {
     await Firebase.initializeApp();
     await initializeDateFormatting('it_IT', null);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Schermata di crash logico personalizzata
-    ErrorWidget.builder = (FlutterErrorDetails details) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF7F1D1D),
-        body: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Center(
-            child: SingleChildScrollView(
-              child: Text(
-                "CRASH RUNTIME FLUTTER:\n\n${details.exception}\n\n${details.stack}",
-                style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
-              ),
-            ),
-          ),
-        ),
-      );
-    };
-
     return MaterialApp(
       title: 'Flolk Chat',
       debugShowCheckedModeBanner: false,
@@ -55,18 +31,37 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF6366F1),
           brightness: Brightness.dark,
-          primary: const Color(0xFF6366F1),
-          surface: const Color(0xFF1E293B),
         ),
         useMaterial3: true,
       ),
-      // FutureBuilder protettivo: mostra un caricamento pulito finché Firebase non risponde
+      // Il FutureBuilder blocca l'app finché Firebase non è pronto al 100%
       home: FutureBuilder(
-        future: _initServices(),
+        future: _initializeFirebaseAndDates(),
         builder: (context, snapshot) {
+          // Se Firebase fallisce l'avvio nativo, intercettiamo l'errore qui!
+          if (snapshot.hasError) {
+            return Scaffold(
+              backgroundColor: const Color(0xFF7F1D1D),
+              body: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Center(
+                  child: SingleChildScrollView(
+                    child: Text(
+                      "ERRORE CRITICO DI CONFIGURAZIONE:\n\n${snapshot.error}\n\nVerifica che il file google-services.json sia presente in android/app/",
+                      style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 14),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+
+          // Se ha finito l'inizializzazione con successo, passa alla verifica dell'utente
           if (snapshot.connectionState == ConnectionState.done) {
             return const AuthGate();
           }
+
+          // Schermata di caricamento temporanea (Splash Screen)
           return const Scaffold(
             backgroundColor: Color(0xFF0F172A),
             body: Center(
