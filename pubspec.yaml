@@ -14,14 +14,14 @@ dependencies:
   # Icone iOS/Android standard
   cupertino_icons: ^1.0.6
 
-  # Firebase (Inclusa l'autenticazione che mancava e Firestore)
+  # Firebase (Configurazione stabile e testata)
   firebase_core: ^2.24.0
   firebase_auth: ^4.16.0
   cloud_firestore: ^4.14.0
 
-  # Gestione dei File e delle Immagini nella chat
-  image_picker: ^1.0.7
-  file_picker: ^6.1.1
+  # Gestione dei File e delle Immagini (Risolto il problema del v1 embedding)
+  image_picker: ^1.1.0
+  file_picker: ^8.1.2
 
   # Formattazione date e utility
   intl: ^0.18.1
@@ -33,13 +33,13 @@ dev_dependencies:
   # Linting per la qualità del codice
   flutter_lints: ^2.0.3
 
-  # Pacchetto richiesto da Codemagic per lo Step 4
+  # Richiesto da Codemagic per lo Step 4
   flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
 
-  # Definiamo la cartella assets così Flutter sa dove andare a leggere l'icona
+  # Cartella assets per l'icona dell'applicazione
   assets:
     - assets/icon/
 
