@@ -9,7 +9,6 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-// Cambiato in TickerProviderStateMixin per supportare più animazioni contemporaneamente
 class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
   final _auth = FirebaseAuth.instance;
   final _emailController = TextEditingController();
@@ -164,6 +163,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
           ),
           child: TabBar(
             controller: _tabController,
+            dividerColor: Colors.transparent, // <--- CANCELLA LA RIGHINA BIANCA
             indicator: BoxDecoration(
               color: const Color(0xFF00A884),
               borderRadius: BorderRadius.circular(12),
@@ -210,11 +210,16 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
           onPressed: _isLoading ? null : _submitData,
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF00A884),
+            disabledBackgroundColor: const Color(0xFF00A884).withOpacity(0.6), // Evita l'effetto invisibile
             padding: const EdgeInsets.symmetric(vertical: 15),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
           ),
           child: _isLoading 
-            ? const Text('Elaborazione...', style: TextStyle(color: Colors.white))
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              )
             : AnimatedBuilder(
                 animation: _tabController,
                 builder: (context, child) => Text(
