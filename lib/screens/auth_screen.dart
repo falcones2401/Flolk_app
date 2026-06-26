@@ -158,7 +158,7 @@ class _AuthScreenState extends State<AuthScreen> {
       _showError(errorMessage);
     } catch (e) {
       _showError("Errore imprevisto: $e");
-    } final {
+    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
