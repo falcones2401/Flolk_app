@@ -7,7 +7,7 @@ import 'screens/home_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    // Timeout di sicurezza per l'inizializzazione nativa
+    // Inizializzazione nativa protetta da timeout
     await Firebase.initializeApp().timeout(const Duration(seconds: 8));
   } catch (e) {
     debugPrint("Errore inizializzazione Firebase: $e");
@@ -23,13 +23,14 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flolk Chat',
       debugShowCheckedModeBanner: false,
+      // Tema scuro nativo corretto senza conflitti di costanti
       theme: ThemeData(
         brightness: Brightness.dark,
-        primaryColor: const Color(0xFF6366F1),
         scaffoldBackgroundColor: const Color(0xFF0F172A),
-        colorScheme: const ColorScheme.dark(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6366F1),
+          brightness: Brightness.dark,
           primary: const Color(0xFF6366F1),
-          secondary: const Color(0xFF818CF8),
           surface: const Color(0xFF1E293B),
         ),
         useMaterial3: true,
@@ -47,6 +48,7 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
+        // Se Firebase sta ancora caricando i token locali, Scaffold scuro di sicurezza
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             backgroundColor: Color(0xFF0F172A),
@@ -59,13 +61,16 @@ class AuthGate extends StatelessWidget {
         if (snapshot.hasData && snapshot.data != null) {
           final user = snapshot.data!;
 
+          // Se l'utente non è verificato via mail, va alla schermata di Auth
           if (!user.emailVerified) {
             return const AuthScreen();
           }
 
+          // Altrimenti sblocca ed entra nella HomeScreen
           return const HomeScreen();
         }
 
+        // Se non è loggato, mostra Login
         return const AuthScreen();
       },
     );
